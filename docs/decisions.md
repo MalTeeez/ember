@@ -76,3 +76,14 @@ Rule: when the spec is silent, choose the simplest option.
 | S5 | Scheduled task: at logon of the current user, highest privileges, no execution time limit, runs on battery, ignore a new instance. | The default task time limit (72 h) would stop the widget. |
 | S6 | Settings JSON with comments and trailing commas is accepted. A broken file gives default settings (and is overwritten on the next change). Values are clamped (sensor interval 0.25–60 s, Claude 15–3600 s, opacity 10–100 %, font 6–32 pt). | Robustness. |
 | S7 | Debug log: `%APPDATA%\Ember\ember.log`, cut at 1 MB (one `.old` file). Each failing source is logged once until it works again. | Spec: debug log, off by default. |
+
+## Notes
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| N1 | Editor = RichEdit 4.1+ (`Msftedit.dll`, class `RICHEDIT50W`) inside a borderless layered window owned by the desktop window. | Built into Windows; supports per-range colour and bold/italic/strike-out. |
+| N2 | Styling: the whole note is styled again after each change (notes are small). Headings bold; bold/italic as written; inline code with a slightly lighter background; markers and ticked-checkbox text dim (ticked text also struck out). | Spec: styled as you type, markers visible but dim, same colours as the widget. |
+| N3 | Window: drag the top strip (14 px) to move; drag an edge to resize; right-click → New note / Delete note. Delete asks for confirmation only if the note is not empty. | The spec does not define move/resize. |
+| N4 | Positions and sizes: `%APPDATA%\Ember\notes\notes.json` (screen pixels). Text: `<id>.md` with CRLF line ends. Id = creation time plus 4 random hex digits. | Spec: one `.md` file per note. A note whose position is off screen moves to the primary monitor. |
+| N5 | Default hotkey for a new note: Ctrl+Alt+N. A hotkey that another program has is logged and ignored. | The spec gives no default. |
+| N6 | Known limit: Ctrl+Z can also undo a styling step. | RichEdit records formatting in its undo stack. |

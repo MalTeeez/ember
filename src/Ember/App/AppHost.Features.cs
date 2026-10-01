@@ -11,9 +11,19 @@ internal sealed partial class AppHost
     private const int NewNoteHotkeyId = 1;
 
     private ClaudePoller? _claude;
+    private Ui.NotesManager? _notes;
+    private string _hotkey = "";
+    private string _noteLayoutKey = "";
+
+    private static string NoteLayoutKey(EmberSettings s) => $"{s.Layout.Font}|{s.Layout.FontSize}|{s.Layout.Opacity}";
 
     private void StartFeatures()
     {
+        _notes = new Ui.NotesManager(SettingsStore.Clone(_settings).Layout);
+        _notes.LoadAll();
+        _noteLayoutKey = NoteLayoutKey(_settings);
+        RegisterNoteHotkey(_settings.Notes.NewNoteHotkey);
+
         _claude = new ClaudePoller(Paths.ClaudeCredentials);
         _claude.Configure(_settings.Items.Claude, _settings.Intervals.ClaudeSeconds);
         if (_settings.Items.Claude) _claude.Start();
@@ -28,11 +38,24 @@ internal sealed partial class AppHost
     {
         _claude?.Resume();
     }
-    private void ReattachFeatures() { }
-    private void BringFeaturesToFront() { }
+    private void ReattachFeatures() => _notes?.Reattach();
+    private void BringFeaturesToFront() => _notes?.BringToFront();
+
+    /// <summary>Registers the global "new note" hotkey. An invalid or taken hotkey is logged and ignored.</summary>
+    private void RegisterNoteHotkey(string text)
+    {
+        if (text == _hotkey) return;
+        W.UnregisterHotKey(Handle, NewNoteHotkeyId);
+        _hotkey = text;
+        if (!Core.Util.Hotkey.TryParse(text, out uint mods, out uint vk)) return;
+        if (!W.RegisterHotKey(Handle, NewNoteHotkeyId, mods | W.MOD_NOREPEAT, vk))
+            Log.Write($"hotkey {text} is used by another program");
+    }
     private void StopFeatures()
     {
         _settingsWindow?.Destroy();
+        _notes?.CloseAll();
+        W.UnregisterHotKey(Handle, NewNoteHotkeyId);
         _claude?.Dispose();
         _claude = null;
     }
@@ -40,8 +63,16 @@ internal sealed partial class AppHost
     private void OnSettingsChanged(EmberSettings s)
     {
         _claude?.Configure(s.Items.Claude, s.Intervals.ClaudeSeconds);
+        RegisterNoteHotkey(s.Notes.NewNoteHotkey);
+        string key = NoteLayoutKey(s);
+        if (key != _noteLayoutKey)
+        {
+            _noteLayoutKey = key;
+            _notes?.ApplyLayout(SettingsStore.Clone(s).Layout);
+        }
     }
-    private void NewNote() { }
+
+    private void NewNote() => _notes?.New();
     private Ui.SettingsWindow? _settingsWindow;
 
     /// <summary>Opens the settings window (created now, destroyed on close).</summary>
