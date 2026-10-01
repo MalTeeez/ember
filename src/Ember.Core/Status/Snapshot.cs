@@ -52,7 +52,7 @@ public sealed class Snapshot
     public DateTime Time { get; init; }
     public CpuData? Cpu { get; init; }
     public List<AdapterRate>? Net { get; init; }
-    public NetQuality? Quality { get; init; }
+    public NetQuality? Quality { get; set; }
     public List<GpuData>? Gpus { get; init; }
     public MemData? Mem { get; init; }
     public List<DiskData>? Disks { get; init; }
@@ -60,7 +60,7 @@ public sealed class Snapshot
     public ProcInfo? TopCpu { get; init; }
     public ProcInfo? TopMem { get; init; }
     public ProcInfo? TopDisk { get; init; }
-    public IReadOnlyList<ClaudeLine>? Claude { get; init; }
+    public IReadOnlyList<ClaudeLine>? Claude { get; set; }
 }
 
 /// <summary>What the sampler must collect for the next samples (process scans are costly).</summary>

@@ -27,7 +27,6 @@ internal sealed partial class AppHost : Win32Window, IDisposable
     private TrayIcon? _tray;
     private Sampler? _sampler;
     private Snapshot? _pending;
-    private Snapshot? _last;
     private bool _locked, _displayOff;
     private IntPtr _powerNotify;
 
@@ -96,7 +95,8 @@ internal sealed partial class AppHost : Win32Window, IDisposable
         _widget.Settings = SettingsStore.Clone(copy);
         OnSettingsChanged(copy);
         if (!fromWidget) _widget.Invalidate();
-        Recompose();
+        // The next sample (now) composes with the new settings. Composing the last snapshot
+        // again would add a duplicate sample to the graphs.
         _sampler?.Poke();
     }
 
@@ -104,16 +104,8 @@ internal sealed partial class AppHost : Win32Window, IDisposable
     {
         var snap = Interlocked.Exchange(ref _pending, null);
         if (snap == null) return;
-        _last = snap;
         var lines = _composer.Compose(snap, _settings);
         _widget.Render(lines);
-    }
-
-    /// <summary>Compose again with the last snapshot (after a settings change).</summary>
-    private void Recompose()
-    {
-        if (_last == null) return;
-        _widget.Render(_composer.Compose(_last, _settings));
     }
 
     private void UpdateIdle()
@@ -186,7 +178,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
             }
 
             case WM_CLAUDE:
-                Recompose();
+                _sampler?.Poke();
                 return IntPtr.Zero;
 
             case W.WM_HOTKEY:
