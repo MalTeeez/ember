@@ -28,7 +28,7 @@ public class MarkdownTests
         Assert.True(Has(s, 8, 3, MdStyle.Italic));
         Assert.True(Has(s, 12, 3, MdStyle.Code));
         Assert.True(Has(s, 16, 3, MdStyle.Italic));
-        Assert.False(s.Any(x => (x.Style & MdStyle.Bold) != 0 && (x.Style & MdStyle.Italic) != 0));
+        Assert.DoesNotContain(s, x => (x.Style & MdStyle.Bold) != 0 && (x.Style & MdStyle.Italic) != 0);
     }
 
     [Fact]
