@@ -213,4 +213,5 @@ These decisions replace older ones where they conflict (noted in brackets).
 | A10 | **Ping lines** show the pinged host instead of "isp"/"lan" (option off); option "ping always" (coloured by the thresholds). | Requested. |
 | A11 | **Claude polling:** at least 2 min (default 2 min); 429 adds 30 s up to 5 min. | The log showed a 429 for every second request at 1 min. |
 | A12 | **Less blinking** (from the decision log): threshold bands — a visible hot core stays until its load is 15 points below the hot-core load (temperatures 3 °C); GPU top process 15 points; GPU load up to 5 points; soft paging 30 %. A shown top process stays through short gaps in its samples (up to the stick time). "Secure System" is never a top process. | The log showed the same items crossing their thresholds every second. |
+| A13 | **Razer:** an interface that does not open for read/write (Windows owns mouse and keyboard collections: error 5) is opened again without read/write access; feature reports (HidD_SetFeature/GetFeature) work with such a handle. | The log showed the 91-byte control interface of the 00C5 receiver among the ones that did not open. |
 

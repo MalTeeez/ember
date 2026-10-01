@@ -153,13 +153,22 @@ internal static class DeviceBatteries
     private static DeviceBattery? QueryRazer(string path, HashSet<ushort> seen, List<string>? trace)
     {
         string shortPath = path.Length > 70 ? path[..70] + "…" : path;
-        using var h = CreateFile(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+        var h = CreateFile(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
         if (h.IsInvalid)
         {
-            // Mouse/keyboard collections are owned by Windows; the vendor collection opens.
-            trace?.Add($"razer {shortPath}: cannot open (error {Marshal.GetLastWin32Error()}; normal for mouse/keyboard collections)");
-            return null;
+            // Mouse/keyboard collections are owned by Windows (access denied for read/write). Feature
+            // reports still work with a handle opened without read/write access.
+            int err = Marshal.GetLastWin32Error();
+            h.Dispose();
+            h = CreateFile(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+            if (h.IsInvalid)
+            {
+                trace?.Add($"razer {shortPath}: cannot open (error {err}, also without read/write access: {Marshal.GetLastWin32Error()})");
+                h.Dispose();
+                return null;
+            }
         }
+        using var _h = h;
         var attr = new HIDD_ATTRIBUTES { Size = (uint)Marshal.SizeOf<HIDD_ATTRIBUTES>() };
         if (!HidD_GetAttributes(h, ref attr) || attr.VendorID != RazerProtocol.VendorId) { trace?.Add($"razer {shortPath}: no attributes"); return null; }
         if (seen.Contains(attr.ProductID)) { trace?.Add($"razer {attr.ProductID:X4}: already answered on another interface"); return null; }
