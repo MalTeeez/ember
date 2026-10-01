@@ -52,6 +52,10 @@ Screenshots (themes and options; the last two with "Show everything"):
 
 Each push to `main` builds `Ember.exe` on GitHub Actions (workflow **build**). Open the latest run and download the artifact **Ember-win-x64**. It contains `publish/Ember.exe`, `install.ps1` and `uninstall.ps1`.
 
+## Releases
+
+Each version has a GitHub release with `Ember-<tag>-win-x64.exe` and a zip with the install scripts. A push to `main` with a new `<Version>` in `src/Ember/Ember.csproj` (or a pushed tag `v*`) makes the workflow create the tag `v<major>.<minor>` (`v<major>.<minor>.<patch>` when the patch is not 0) and its release; release notes come from `docs/releases/<tag>.md`, else GitHub generates them.
+
 ## Build
 
 You need the .NET 10 SDK.

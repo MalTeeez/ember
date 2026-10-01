@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# Runs of one branch or tag one after the other, so two pushes cannot both create the same release.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: windows-latest
