@@ -3,8 +3,12 @@ name: build
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -26,7 +30,12 @@ jobs:
         run: dotnet test tests/Ember.Tests/Ember.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
 
       - name: Publish win-x64
-        run: dotnet publish src/Ember/Ember.csproj -c Release -r win-x64 -o publish
+        shell: pwsh
+        run: |
+          # A tag v1.2.3 sets the version of the exe.
+          $version = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}'.TrimStart('v') } else { '' }
+          if ($version) { dotnet publish src/Ember/Ember.csproj -c Release -r win-x64 -o publish -p:Version=$version }
+          else { dotnet publish src/Ember/Ember.csproj -c Release -r win-x64 -o publish }
 
       - name: Upload exe
         uses: actions/upload-artifact@v4
@@ -37,3 +46,20 @@ jobs:
             install.ps1
             uninstall.ps1
           if-no-files-found: warn
+
+      - name: Release (tags only)
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $zip = "Ember-$tag-win-x64.zip"
+          Compress-Archive -Path publish/Ember.exe, install.ps1, uninstall.ps1 -DestinationPath $zip
+          Copy-Item publish/Ember.exe "Ember-$tag-win-x64.exe"
+          $notes = "docs/releases/$tag.md"
+          if (Test-Path $notes) {
+            gh release create $tag $zip "Ember-$tag-win-x64.exe" --title "Ember $tag" --notes-file $notes
+          } else {
+            gh release create $tag $zip "Ember-$tag-win-x64.exe" --title "Ember $tag" --generate-notes
+          }
