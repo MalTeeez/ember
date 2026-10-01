@@ -37,6 +37,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
     {
         _settings = SettingsStore.Load(Paths.Settings);
         Log.Enabled = _settings.DebugLog;
+        SetDecisionLog(_settings);
         Log.Write("start " + typeof(AppHost).Assembly.GetName().Version);
     }
 
@@ -85,6 +86,10 @@ internal sealed partial class AppHost : Win32Window, IDisposable
         }
     }
 
+    /// <summary>Extended debug log: the composer reports its show/hide and kept-space decisions.</summary>
+    private void SetDecisionLog(EmberSettings s)
+        => _composer.Trace = s.DebugLog && s.DebugDecisions ? m => Log.Write("decide: " + m) : null;
+
     /// <summary>Settings changed (from the settings window or a widget drag). Applies at once.</summary>
     public void ApplySettings(EmberSettings s, bool save, bool fromWidget = false)
     {
@@ -92,6 +97,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
         var copy = SettingsStore.Clone(s);
         _settings = copy;
         Log.Enabled = copy.DebugLog;
+        SetDecisionLog(copy);
         if (save)
         {
             try { SettingsStore.Save(Paths.Settings, copy); }

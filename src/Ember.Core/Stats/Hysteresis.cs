@@ -32,6 +32,9 @@ public sealed class Hysteresis
         _since = null;
     }
 
+    /// <summary>True while a show or hide waits for its delay.</summary>
+    public bool Changing => _since != null;
+
     /// <summary>True while the item is visible or a show is pending.</summary>
     public bool Pending => Visible || _since != null;
 }
@@ -46,6 +49,8 @@ public sealed class VisibilitySet
     private readonly HashSet<string> _touched = new();
     public TimeSpan ShowDelay { get; set; } = TimeSpan.FromSeconds(5);
     public TimeSpan HideDelay { get; set; } = TimeSpan.FromSeconds(10);
+    /// <summary>Decision log (extended debug): pending and done show/hide changes.</summary>
+    public Action<string>? Trace { get; set; }
 
     public void BeginTick() => _touched.Clear();
 
@@ -57,7 +62,15 @@ public sealed class VisibilitySet
             _items[key] = h;
         }
         _touched.Add(key);
-        return h.Update(condition, now, ShowDelay, HideDelay);
+        if (Trace == null) return h.Update(condition, now, ShowDelay, HideDelay);
+        bool wasVisible = h.Visible, wasPending = h.Pending && !h.Visible, wasHiding = h.Visible && h.Changing;
+        bool vis = h.Update(condition, now, ShowDelay, HideDelay);
+        if (vis != wasVisible) Trace($"{(vis ? "show" : "hide")} {key}");
+        else if (!vis && h.Pending && !wasPending) Trace($"{key}: over its threshold, shows in {ShowDelay.TotalSeconds:0} s if it stays");
+        else if (!vis && wasPending && !h.Pending) Trace($"{key}: back to normal before the show delay (no change)");
+        else if (vis && h.Changing && !wasHiding) Trace($"{key}: normal again, hides in {HideDelay.TotalSeconds:0} s if it stays");
+        else if (vis && wasHiding && !h.Changing) Trace($"{key}: over its threshold again before the hide delay (stays)");
+        return vis;
     }
 
     /// <summary>True if the key is visible or about to show (used to start sampling early).</summary>

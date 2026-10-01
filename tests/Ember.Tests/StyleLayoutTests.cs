@@ -579,8 +579,8 @@ public class DiskMemoryLineTests
         List<Ember.Core.Render.Line> lines = new();
         for (int i = 0; i <= 6; i++)
             lines = c.Compose(new Snapshot { Time = T0.AddSeconds(i), Mem = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = G, CommitLimitBytes = 32 * G, PagesInPerSec = 6000 } }, cfg);
-        var l = lines.Single(x => x.Text.Contains("hard page faults"));
-        Assert.StartsWith("hard page faults ", l.Text);
+        var l = lines.Single(x => x.Text.Contains("hard disk paging"));
+        Assert.StartsWith("hard disk paging ", l.Text);
         Assert.EndsWith("6.0k/s", l.Text);
     }
 }
@@ -604,7 +604,7 @@ public class FaultLineTests
                 FaultProcs = procs, FaultsTotal = 1000,
             }, cfg);
         Assert.True(c.Needs.Faults);
-        int k = lines.FindIndex(l => l.Text.StartsWith("hard page faults"));
+        int k = lines.FindIndex(l => l.Text.StartsWith("hard disk paging"));
         var first = lines[k + 1];
         Assert.StartsWith(" └ chrome ", first.Text); // no .exe
         Assert.EndsWith(" 4.0GB  900/s", first.Text);
@@ -645,5 +645,50 @@ public class ProcessNameTests
     {
         Assert.Equal("python3.13 ma..", Format.FitDots("python3.13 main.py", 15));
         Assert.Equal("node  ", Format.FitDots("node", 6));
+    }
+}
+
+public class SoftPagingAndPeakTests
+{
+    [Fact]
+    public void SoftPaging_OnlyWithoutHardPaging()
+    {
+        var cfg = new EmberSettings();
+        cfg.Layout.HoldSeconds = 0;
+        const ulong G = 1024UL * 1024 * 1024;
+        var procs = new List<FaultProc> { new(10, "chrome.exe", G, 0, 40000), new(11, "game.exe", G, 900, 100) };
+        List<Ember.Core.Render.Line> Run(double hard, double soft)
+        {
+            var c = new StatusComposer();
+            List<Ember.Core.Render.Line> lines = new();
+            for (int i = 0; i <= 6; i++)
+                lines = c.Compose(new Snapshot
+                {
+                    Time = new DateTime(2026, 10, 1, 12, 0, i),
+                    Mem = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = G, CommitLimitBytes = 32 * G, PagesInPerSec = hard, SoftFaultsPerSec = soft },
+                    FaultProcs = procs, FaultsTotal = 900, SoftFaultsTotal = 40100,
+                }, cfg);
+            return lines;
+        }
+        var softOnly = Run(10, 60000);
+        int k = softOnly.FindIndex(l => l.Text.StartsWith("soft disk paging"));
+        Assert.True(k >= 0);
+        Assert.StartsWith(" └ chrome ", softOnly[k + 1].Text);
+        var both = Run(6000, 60000);
+        Assert.Contains(both, l => l.Text.StartsWith("hard disk paging"));
+        Assert.DoesNotContain(both, l => l.Text.StartsWith("soft disk paging"));
+    }
+
+    [Fact]
+    public void SlidingPeak_ForgetsAfterTheWindow()
+    {
+        var t0 = new DateTime(2026, 1, 1);
+        var p = new SlidingPeak();
+        p.Add(t0, 100);
+        p.Add(t0.AddMinutes(10), 20);
+        Assert.Equal(100, p.Max);
+        Assert.Equal(0.2, p.Fraction(20), 3);
+        p.Add(t0.AddMinutes(61), 30);
+        Assert.Equal(30, p.Max);
     }
 }

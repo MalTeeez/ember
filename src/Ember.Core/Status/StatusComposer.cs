@@ -29,6 +29,15 @@ public sealed class StatusComposer
     private readonly HeightKeeper _keep = new();
     private readonly Dictionary<string, StickyTop> _sticky = new();
     private readonly DataGate _gate = new();
+    // Peaks of the last hour, to colour the network numbers by how high they are.
+    private readonly Dictionary<string, SlidingPeak> _hourPeak = new();
+
+    private SlidingPeak HourPeak(string key, double value)
+    {
+        if (!_hourPeak.TryGetValue(key, out var p)) _hourPeak[key] = p = new SlidingPeak();
+        p.Add(_now, value);
+        return p;
+    }
     private readonly HashSet<string> _gone = new();
     private int _usageLabelWidth = 5;
     private ThemeColors _c = ThemeColors.From(new Theme());
@@ -38,6 +47,21 @@ public sealed class StatusComposer
     private DateTime _now;
     private TimeSpan _stick;
     public Needs Needs { get; } = new();
+
+    private Action<string>? _trace;
+    /// <summary>Decision log (extended debug): show/hide, kept space, top process changes, widget height.</summary>
+    public Action<string>? Trace
+    {
+        get => _trace;
+        set
+        {
+            _trace = value;
+            _vis.Trace = value;
+            _keep.Trace = value;
+        }
+    }
+    private int _lastCount = -1, _lastPadding = -1;
+    private readonly Dictionary<string, int> _stickyPid = new();
 
     // Enough samples for the longest graph (from the label column to the right edge).
     private const int HistorySamples = (Layout.Width - Layout.LabelWidth) * 2;
@@ -59,6 +83,7 @@ public sealed class StatusComposer
         _cores.Reset();
         _keep.Clear();
         _gate.Clear();
+        _hourPeak.Clear();
         _usageLabelWidth = 5;
         foreach (var s in _sticky.Values) s.Reset();
     }
@@ -71,7 +96,18 @@ public sealed class StatusComposer
     private ProcInfo? Sticky(string key, IReadOnlyList<ProcInfo>? candidates)
     {
         if (!_sticky.TryGetValue(key, out var st)) _sticky[key] = st = new StickyTop();
-        return st.Update(candidates, _now, _stick);
+        var p = st.Update(candidates, _now, _stick);
+        if (_trace != null)
+        {
+            int pid = p?.Pid ?? 0, old = _stickyPid.GetValueOrDefault(key);
+            if (pid != old)
+            {
+                _trace($"top process {key}: {(old == 0 ? "none" : old.ToString(System.Globalization.CultureInfo.InvariantCulture))} → {(p == null ? "none" : p.Name + " (" + pid + ")")}" +
+                    (candidates is { Count: > 0 } && p != null && candidates[0].Pid != pid ? " (kept: the new top did not stay on top long enough)" : ""));
+                _stickyPid[key] = pid;
+            }
+        }
+        return p;
     }
 
     public List<Line> Compose(Snapshot s, EmberSettings cfg, ComposeContext? ctx = null)
@@ -119,13 +155,20 @@ public sealed class StatusComposer
 
     // ───────────── Layout ─────────────
 
-    /// <summary>Places item lines in layout order, keeps heights, and shows headers/spacers of non-empty groups.</summary>
+    /// <summary>
+    /// Places item lines in layout order, keeps heights, and shows headers/spacers of non-empty groups.
+    /// Kept (empty) space goes to the bottom of the widget by default, so the lines that remain move up
+    /// and stay together; option "inline" keeps the empty lines where the item was.
+    /// </summary>
     private List<Line> Arrange(Dictionary<string, List<Line>> items)
     {
         var entries = _cfg.Entries;
         var hold = _preview ? TimeSpan.Zero : TimeSpan.FromSeconds(_cfg.Layout.HoldSeconds);
+        bool bottom = _cfg.Layout.KeptSpace != "inline";
         var height = new int[entries.Count];
+        var real = new int[entries.Count];
         var output = new List<Line>?[entries.Count];
+        int pad = 0;
         for (int i = 0; i < entries.Count; i++)
         {
             var e = entries[i];
@@ -140,8 +183,10 @@ public sealed class StatusComposer
             var lines = items.GetValueOrDefault(e.Id) ?? new List<Line>();
             int h = _keep.Reserve(e.Id, lines.Count, _now, hold);
             var list = new List<Line>(lines);
-            while (list.Count < h) list.Add(Layout.Blank(padding: true));
+            if (bottom) pad += h - lines.Count;
+            else while (list.Count < h) list.Add(Layout.Blank(padding: true));
             height[i] = h;
+            real[i] = lines.Count;
             output[i] = list;
         }
 
@@ -157,6 +202,8 @@ public sealed class StatusComposer
                 continue;
             }
             if (e.Collapse && GroupHeight(entries, height, i) == 0) continue;
+            // A section that only keeps space: its header/spacer line is kept space too (at the bottom).
+            if (bottom && e.Collapse && GroupHeight(entries, real, i) == 0) { pad++; continue; }
             var deco = e.Kind == "header" ? Layout.Header(e.Text ?? "", _c) : Layout.Spacer(e.Preset, e.Text, _c);
             if (e.Kind == "header" && _c.Theme.HeaderBand) deco.Back = _c.Band(_c.Header, 30);
             result.Add(deco);
@@ -166,9 +213,21 @@ public sealed class StatusComposer
         // No empty lines at the top or bottom of the widget.
         while (result.Count > 0 && IsEmpty(result[0]) && !result[0].IsPadding) result.RemoveAt(0);
         while (result.Count > 0 && IsEmpty(result[^1]) && !result[^1].IsPadding) result.RemoveAt(result.Count - 1);
+        for (int i = 0; i < pad; i++) result.Add(Layout.Blank(padding: true));
         // The top row moves the widget (drag); its buttons still work (smaller hits win).
         if (result.Count > 0 && !result[0].Hits.Any(h => h.Width >= Layout.Width))
             result[0].Hits.Insert(0, new Hit(0, Layout.Width, HitAction.Drag, "", ""));
+
+        if (_trace != null)
+        {
+            int padding = result.Count(l => l.IsPadding);
+            if (result.Count != _lastCount || padding != _lastPadding)
+            {
+                _trace($"widget height {(_lastCount < 0 ? "-" : _lastCount.ToString(System.Globalization.CultureInfo.InvariantCulture))} → {result.Count} lines ({padding} kept empty{(bottom ? " at the bottom" : "")})");
+                _lastCount = result.Count;
+                _lastPadding = padding;
+            }
+        }
         return result;
     }
 
@@ -442,8 +501,8 @@ public sealed class StatusComposer
             var hu = Hist("net.up");
             hu.Add(up);
             double downPk = net.Sum(a => a.DownPps), upPk = net.Sum(a => a.UpPps);
-            if (On("net.down")) items["net.down"] = new() { NetLine("↓", down, downPk, hd, _c.NetDown, bytes) };
-            if (On("net.up")) items["net.up"] = new() { NetLine("↑", up, upPk, hu, _c.NetUp, bytes) };
+            if (On("net.down")) items["net.down"] = new() { NetLine("↓", down, downPk, hd, _c.NetDown, bytes, HourPeak("down", down), HourPeak("down.pk", downPk)) };
+            if (On("net.up")) items["net.up"] = new() { NetLine("↑", up, upPk, hu, _c.NetUp, bytes, HourPeak("up", up), HourPeak("up.pk", upPk)) };
 
             // Adapter names: only when more than one physical adapter has traffic.
             var active = net.Where(a => a.DownBps + a.UpBps >= AdapterTrafficBps).ToList();
@@ -488,17 +547,20 @@ public sealed class StatusComposer
         return b.Build();
     }
 
-    /// <summary>"↓  61M ⣀⣠⣤⣴⣶⣿… 457k pkt" — rate, graph (scaled to its peak), packets per second.</summary>
-    private Line NetLine(string arrow, double bps, double pps, History h, Rgb accent, bool bytes)
+    /// <summary>
+    /// "↓  61M ⣀⣠⣤⣴⣶⣿… 457k pkt" — rate, graph (scaled to its peak), packets per second. The numbers are
+    /// coloured by how high they are compared to the highest value of the last hour.
+    /// </summary>
+    private Line NetLine(string arrow, double bps, double pps, History h, Rgb accent, bool bytes, SlidingPeak hour, SlidingPeak hourPk)
     {
         double peak = Math.Max(h.Max, bps);
         var b = new LineBuilder();
         b.Add(arrow + " ", accent);
-        Val(b, Format.Rate4(bps, bytes));
+        Val(b, Format.Rate4(bps, bytes), _c.GraphCell(hour.Fraction(bps), accent));
         b.Add(" ", _c.Dim);
         string pkt = Format.Pkt(pps);
         Graph(b, h.Values, peak <= 0 ? 1 : peak, accent, b.Column, Layout.Width - b.Column - pkt.Length - 1);
-        b.Add(" ", _c.Dim).Add(Format.Count4(pps), _c.Unit).Add(" pkt", _c.Dim);
+        b.Add(" ", _c.Dim).Add(Format.Count4(pps), _c.GraphCell(hourPk.Fraction(pps), accent)).Add(" pkt", _c.Dim);
         return b.Build();
     }
 
@@ -597,27 +659,37 @@ public sealed class StatusComposer
 
         if (On("mem.pagein") && m.PagesInPerSec is { } pf)
         {
-            // "hard page faults ⣀⣠⣴⣶⣿⣿  983/s" — pages read from disk (hard page faults) per second,
-            // then the processes that cause them.
+            // "hard disk paging ⣀⣠⣴⣶⣿  983/s" — pages read from disk (hard page faults) per second,
+            // then the processes that cause them. Without hard paging: "soft disk paging" (soft faults).
             var h = Hist("mem.pf");
             h.Add(Math.Max(0, pf));
+            double soft = m.SoftFaultsPerSec ?? 0;
+            var hs = Hist("mem.soft");
+            hs.Add(soft);
             bool cond = t.PageFaults.Crossed(pf);
             bool vis = Vis("mem.pf", cond);
-            Needs.Faults = cond || vis || _vis.IsPending("mem.pf") || _preview;
-            if (vis)
+            bool hardActive = cond || vis || _vis.IsPending("mem.pf");
+            bool softCond = !hardActive && m.SoftFaultsPerSec != null && t.SoftPageFaults.Crossed(soft);
+            bool softVis = !hardActive && Vis("mem.soft", softCond);
+            Needs.Faults = hardActive || softCond || softVis || _vis.IsPending("mem.soft") || _preview;
+            if (vis || softVis)
             {
                 any = true;
+                bool hard = vis;
+                var th = hard ? t.PageFaults : t.SoftPageFaults;
+                double value = hard ? pf : soft;
+                var hist = hard ? h : hs;
                 var b = new LineBuilder();
-                b.Add("hard page faults", _c.Memory);
-                string value = Format.Count4(pf) + "/s";
-                Graph(b, h.Values, Math.Max(h.Max, t.PageFaults.Crit), _c.Memory, b.Column + 1, Layout.Width - value.Length - 1 - b.Column - 1);
+                b.Add(hard ? "hard disk paging" : "soft disk paging", _c.Memory);
+                string text = Format.Count4(value) + "/s";
+                Graph(b, hist.Values, Math.Max(hist.Max, th.Crit), _c.Memory, b.Column + 1, Layout.Width - text.Length - 1 - b.Column - 1);
                 b.Add(" ", _c.Dim);
-                Val(b, value, _c.Severity(pf, t.PageFaults.Warn, t.PageFaults.Crit));
+                Val(b, text, _c.Severity(value, th.Warn, th.Crit));
                 var lines = new List<Line> { b.Build() };
-                lines.AddRange(FaultLines(s.FaultProcs, s.FaultsTotal, m.TotalBytes));
+                lines.AddRange(FaultLines(s.FaultProcs, hard ? s.FaultsTotal : s.SoftFaultsTotal, m.TotalBytes, hard));
                 items["mem.pagein"] = lines;
             }
-            pending |= cond || _vis.IsPending("mem.pf");
+            pending |= cond || _vis.IsPending("mem.pf") || softCond || _vis.IsPending("mem.soft");
         }
 
         if (On("mem.top"))
@@ -657,23 +729,25 @@ public sealed class StatusComposer
     /// its share of the RAM) and hard faults per second (colour = its share of all hard faults).
     /// Click = details, right-click = process menu.
     /// </summary>
-    private IEnumerable<Line> FaultLines(IReadOnlyList<FaultProc>? procs, double total, double ram)
+    private IEnumerable<Line> FaultLines(IReadOnlyList<FaultProc>? all, double total, double ram, bool hard)
     {
+        double Rate(FaultProc p) => hard ? p.HardFaultsPerSec : p.SoftFaultsPerSec;
+        var procs = all?.Where(p => Rate(p) >= (hard ? 1 : 100)).OrderByDescending(Rate).ToList();
         if (procs is not { Count: > 0 }) yield break;
-        double sum = Math.Max(total, procs.Sum(p => p.HardFaultsPerSec));
+        double sum = Math.Max(total, procs.Sum(Rate));
         foreach (var p in procs.Take(MaxFaultLines))
         {
             string pid = p.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var b = new LineBuilder();
-            b.LineHit(HitAction.ProcessDetails, pid, $"{p.Name} (PID {pid}): {Format.Count4(p.HardFaultsPerSec).Trim()} hard page faults/s");
-            string faults = Format.Count4(p.HardFaultsPerSec) + "/s";
+            b.LineHit(HitAction.ProcessDetails, pid, $"{p.Name} (PID {pid}): {Format.Count4(Rate(p)).Trim()} {(hard ? "hard" : "soft")} page faults/s");
+            string faults = Format.Count4(Rate(p)) + "/s";
             int nameWidth = Layout.Width - 3 - 1 - 5 - 1 - faults.Length;
             b.Add(" └ ", _c.Dim).Add(Format.FitDots(Util.ProcessNames.StripExe(p.Name), nameWidth), _c.Process).PadTo(3 + nameWidth + 1);
             // Memory: full colour at a quarter of the RAM.
             double memShare = ram > 0 ? Math.Min(1, 4 * p.PrivateBytes / ram) : 0;
             Val(b, Format.BytesB(p.PrivateBytes), Rgb.Stops(_c.GraphStops, memShare));
             b.Add(" ", _c.Dim);
-            Val(b, faults, Rgb.Stops(_c.GraphStops, sum > 0 ? p.HardFaultsPerSec / sum : 0));
+            Val(b, faults, Rgb.Stops(_c.GraphStops, sum > 0 ? Rate(p) / sum : 0));
             var line = b.Build();
             if (_c.Theme.ProcessBand) line.Back = _c.Band(_c.Process, 22);
             yield return line;
@@ -681,7 +755,7 @@ public sealed class StatusComposer
         if (procs.Count > MaxFaultLines)
         {
             var b = new LineBuilder();
-            b.Add("   ", _c.Dim).Add($"{procs.Count - MaxFaultLines} more with hard faults", _c.Unit);
+            b.Add("   ", _c.Dim).Add($"{procs.Count - MaxFaultLines} more with {(hard ? "hard" : "soft")} faults", _c.Unit);
             yield return b.Build();
         }
     }
@@ -767,12 +841,20 @@ public sealed class StatusComposer
     private IReadOnlyList<ClaudeLine>? Gate(string source, IReadOnlyList<ClaudeLine>? usage, params string[] ids)
     {
         bool has = usage is { Count: > 0 };
-        if (_preview || _gate.Update(source, has, _now)) return usage;
+        bool ok = _preview || _gate.Update(source, has, _now);
+        if (_trace != null && _gateShown.GetValueOrDefault(source) != ok)
+        {
+            _trace($"{source} usage: {(ok ? "shown (data)" : has ? "hidden for 1 min after a data loss" : "hidden (no data)")}");
+            _gateShown[source] = ok;
+        }
+        if (ok) return usage;
         foreach (var id in ids) _gone.Add(id);
         return null;
     }
 
     /// <summary>Usage limits of one provider (Claude, Codex, Copilot): short, long and extra windows to their layout items.</summary>
+    private readonly Dictionary<string, bool> _gateShown = new();
+
     private void ComposeUsage(IReadOnlyList<ClaudeLine>? usage, Dictionary<string, List<Line>> items, string shortId, string longId, string extraId, Rgb accent)
     {
         if (usage is not { Count: > 0 }) return;

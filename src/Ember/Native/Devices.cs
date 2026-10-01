@@ -71,7 +71,7 @@ internal static class DeviceBatteries
     // ───────── Bluetooth ─────────
 
     /// <summary>Bluetooth devices with a battery level that Windows knows.</summary>
-    public static List<DeviceBattery> Bluetooth()
+    public static List<DeviceBattery> Bluetooth(List<string>? trace = null)
     {
         var result = new List<DeviceBattery>();
         foreach (var enumerator in new[] { "BTHENUM", "BTHLE", "BTHLEDEVICE" })
@@ -85,10 +85,12 @@ internal static class DeviceBatteries
                 {
                     var key = BluetoothBattery;
                     var buf = new byte[4];
-                    if (!SetupDiGetDeviceProperty(set, ref data, ref key, out _, buf, (uint)buf.Length, out uint req, 0) || req < 1) continue;
+                    bool has = SetupDiGetDeviceProperty(set, ref data, ref key, out _, buf, (uint)buf.Length, out uint req, 0) && req >= 1;
+                    string name = StringProperty(set, ref data, FriendlyName) ?? StringProperty(set, ref data, DeviceDesc) ?? "Bluetooth device";
+                    trace?.Add($"bt {enumerator}: {name}: " + (has ? $"battery {buf[0]}" : "no battery value"));
+                    if (!has) continue;
                     int level = buf[0];
                     if (level > 100) continue;
-                    string name = StringProperty(set, ref data, FriendlyName) ?? StringProperty(set, ref data, DeviceDesc) ?? "Bluetooth device";
                     result.Add(new DeviceBattery(name, level, null, "bluetooth"));
                 }
             }
@@ -112,7 +114,7 @@ internal static class DeviceBatteries
     private static readonly Dictionary<string, byte> TransactionIds = new();
 
     /// <summary>Razer wireless receivers that answer the battery command.</summary>
-    public static List<DeviceBattery> Razer()
+    public static List<DeviceBattery> Razer(List<string>? trace = null)
     {
         var result = new List<DeviceBattery>();
         HidD_GetHidGuid(out var hidGuid);
@@ -126,7 +128,7 @@ internal static class DeviceBatteries
             {
                 string? path = InterfacePath(set, ref iface);
                 if (path == null || !path.Contains("vid_1532", StringComparison.OrdinalIgnoreCase)) continue;
-                var battery = QueryRazer(path, seen);
+                var battery = QueryRazer(path, seen, trace);
                 if (battery != null) result.Add(battery);
             }
         }
@@ -148,29 +150,37 @@ internal static class DeviceBatteries
         finally { Marshal.FreeHGlobal(buf); }
     }
 
-    private static DeviceBattery? QueryRazer(string path, HashSet<ushort> seen)
+    private static DeviceBattery? QueryRazer(string path, HashSet<ushort> seen, List<string>? trace)
     {
+        string shortPath = path.Length > 70 ? path[..70] + "…" : path;
         using var h = CreateFile(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
-        if (h.IsInvalid) return null; // mouse/keyboard collections are owned by Windows; the vendor collection opens
+        if (h.IsInvalid)
+        {
+            // Mouse/keyboard collections are owned by Windows; the vendor collection opens.
+            trace?.Add($"razer {shortPath}: cannot open (error {Marshal.GetLastWin32Error()}; normal for mouse/keyboard collections)");
+            return null;
+        }
         var attr = new HIDD_ATTRIBUTES { Size = (uint)Marshal.SizeOf<HIDD_ATTRIBUTES>() };
-        if (!HidD_GetAttributes(h, ref attr) || attr.VendorID != RazerProtocol.VendorId || seen.Contains(attr.ProductID)) return null;
-        if (!HidD_GetPreparsedData(h, out var pre)) return null;
+        if (!HidD_GetAttributes(h, ref attr) || attr.VendorID != RazerProtocol.VendorId) { trace?.Add($"razer {shortPath}: no attributes"); return null; }
+        if (seen.Contains(attr.ProductID)) { trace?.Add($"razer {attr.ProductID:X4}: already answered on another interface"); return null; }
+        if (!HidD_GetPreparsedData(h, out var pre)) { trace?.Add($"razer {attr.ProductID:X4}: no HID caps"); return null; }
         HIDP_CAPS caps;
         try { HidP_GetCaps(pre, out caps); }
         finally { HidD_FreePreparsedData(pre); }
-        if (caps.FeatureReportByteLength != RazerProtocol.ReportLength + 1) return null; // report id + 90 bytes
-
         var nameBuf = new char[127];
         string? product = HidD_GetProductString(h, nameBuf, (uint)(nameBuf.Length * 2)) ? new string(nameBuf).TrimEnd('\0') : null;
-        if (!RazerProtocol.IsReceiver(attr.ProductID, product)) return null;
-        string name = RazerProtocol.KnownReceivers.TryGetValue(attr.ProductID, out var known) ? known : product ?? $"Razer {attr.ProductID:X4}";
+        string info = $"razer {attr.ProductID:X4} '{product}' usage {caps.UsagePage:X4}/{caps.Usage:X4} feature {caps.FeatureReportByteLength} B";
+        // The Razer protocol uses a 91-byte feature report (report id + 90 bytes). Wired mice answer too.
+        if (caps.FeatureReportByteLength != RazerProtocol.ReportLength + 1) { trace?.Add(info + ": not the Razer control interface"); return null; }
+        string name = RazerProtocol.KnownReceivers.TryGetValue(attr.ProductID, out var known) ? known : product is { Length: > 0 } ? product : $"Razer {attr.ProductID:X4}";
 
         var ids = TransactionIds.TryGetValue(path, out byte remembered) ? new[] { remembered } : RazerProtocol.TransactionIds;
         foreach (byte tid in ids)
         {
             var battery = Send(h, tid, RazerProtocol.CmdBattery);
-            if (battery == null) continue;
+            if (battery == null) { trace?.Add(info + $": tid {tid:X2}: no answer"); continue; }
             double? percent = RazerProtocol.BatteryPercent(battery);
+            trace?.Add(info + $": tid {tid:X2}: status {battery[0]:X2}, battery " + (percent is { } pc ? $"{pc:0}%" : "none"));
             if (percent == null) continue;
             TransactionIds[path] = tid;
             bool? charging = Send(h, tid, RazerProtocol.CmdCharging) is { } c ? RazerProtocol.Charging(c) : null;

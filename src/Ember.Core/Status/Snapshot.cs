@@ -7,7 +7,7 @@ namespace Ember.Core.Status;
 public sealed record ProcInfo(int Pid, string Name, double Value, string ValueText);
 
 /// <summary>A process with hard page faults: private bytes and hard faults per second.</summary>
-public sealed record FaultProc(int Pid, string Name, double PrivateBytes, double HardFaultsPerSec);
+public sealed record FaultProc(int Pid, string Name, double PrivateBytes, double HardFaultsPerSec, double SoftFaultsPerSec = 0);
 
 public sealed class CpuData
 {
@@ -49,6 +49,8 @@ public sealed class MemData
     public ulong CommitBytes { get; set; }
     public ulong CommitLimitBytes { get; set; }
     public double? PagesInPerSec { get; set; }
+    /// <summary>Soft page faults per second (all page faults minus page reads from disk).</summary>
+    public double? SoftFaultsPerSec { get; set; }
 }
 
 /// <summary>Physical disk: busy %, average queue length (all, reads, writes; averages over the sample time).</summary>
@@ -74,6 +76,8 @@ public sealed class Snapshot
     public IReadOnlyList<FaultProc>? FaultProcs { get; set; }
     /// <summary>Hard page faults per second of all processes.</summary>
     public double FaultsTotal { get; set; }
+    /// <summary>Soft page faults per second of all processes.</summary>
+    public double SoftFaultsTotal { get; set; }
     public IReadOnlyList<ProcInfo>? TopDisk { get; set; }
     public IReadOnlyList<ClaudeLine>? Claude { get; set; }
     public IReadOnlyList<ClaudeLine>? Codex { get; set; }

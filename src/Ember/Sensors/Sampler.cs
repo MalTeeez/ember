@@ -104,7 +104,7 @@ internal sealed partial class Sampler : IDisposable
         bool scan = needs.TopCpu || needs.TopMem || needs.TopDisk || needs.Faults;
         List<ProcInfo>? topCpu = null, topMem = null, topDisk = null;
         List<FaultProc>? faults = null;
-        double faultsTotal = 0;
+        double faultsTotal = 0, softTotal = 0;
         if (scan)
         {
             if (_procs.Sample(now))
@@ -112,7 +112,7 @@ internal sealed partial class Sampler : IDisposable
                 if (needs.TopCpu) topCpu = _procs.TopCpu();
                 if (needs.TopMem) topMem = _procs.TopMemory();
                 if (needs.TopDisk) topDisk = _procs.TopDisk();
-                if (needs.Faults) (faults, faultsTotal) = _procs.HardFaults();
+                if (needs.Faults) (faults, faultsTotal, softTotal) = _procs.Faults();
             }
         }
         else
@@ -134,6 +134,7 @@ internal sealed partial class Sampler : IDisposable
             TopDisk = topDisk,
             FaultProcs = faults,
             FaultsTotal = faultsTotal,
+            SoftFaultsTotal = softTotal,
         };
     }
 

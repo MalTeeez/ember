@@ -10,13 +10,24 @@ namespace Ember.Sensors;
 // Disk: PDH PhysicalDisk(*) % Idle Time and Avg. Disk Queue Length, GetDiskFreeSpaceEx.
 internal sealed partial class Sampler
 {
-    private PdhQuery.PdhCounter? _pagesIn, _diskIdle, _diskQueue, _diskReadQueue, _diskWriteQueue;
+    private PdhQuery.PdhCounter? _pagesIn, _pageFaults, _pageReads, _diskIdle, _diskQueue, _diskReadQueue, _diskWriteQueue;
 
     private void UpdateMemDiskCounters(EmberSettings cfg)
     {
         bool pf = cfg.IsOn("mem.pagein") || cfg.PreviewAll;
-        if (pf && _pagesIn == null) _pagesIn = _pdh.Add(@"\Memory\Pages Input/sec");
-        else if (!pf && _pagesIn != null) { _pdh.Remove(_pagesIn); _pagesIn = null; }
+        if (pf && _pagesIn == null)
+        {
+            _pagesIn = _pdh.Add(@"\Memory\Pages Input/sec");
+            _pageFaults = _pdh.Add(@"\Memory\Page Faults/sec");
+            _pageReads = _pdh.Add(@"\Memory\Page Reads/sec");
+        }
+        else if (!pf && _pagesIn != null)
+        {
+            _pdh.Remove(_pagesIn);
+            if (_pageFaults != null) _pdh.Remove(_pageFaults);
+            if (_pageReads != null) _pdh.Remove(_pageReads);
+            _pagesIn = _pageFaults = _pageReads = null;
+        }
 
         bool disk = cfg.IsOn("disk.busy") || cfg.PreviewAll;
         if (disk && _diskIdle == null)
@@ -53,6 +64,8 @@ internal sealed partial class Sampler
             CommitBytes = commit,
             CommitLimitBytes = limit,
             PagesInPerSec = pdhOk ? _pagesIn?.Value() : null,
+            // Soft faults = all page faults minus the reads from disk (each hard fault is one read).
+            SoftFaultsPerSec = pdhOk && _pageFaults?.Value() is { } all ? Math.Max(0, all - (_pageReads?.Value() ?? 0)) : null,
         };
     }
 

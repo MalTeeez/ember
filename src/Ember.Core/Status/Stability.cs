@@ -7,6 +7,8 @@ namespace Ember.Core.Status;
 public sealed class HeightKeeper
 {
     private readonly Dictionary<string, (int Height, DateTime LastNeeded)> _keep = new();
+    /// <summary>Decision log (extended debug).</summary>
+    public Action<string>? Trace { get; set; }
 
     /// <summary>Returns the height to reserve for the key.</summary>
     public int Reserve(string key, int lines, DateTime now, TimeSpan hold)
@@ -23,16 +25,25 @@ public sealed class HeightKeeper
         }
         if (now - k.LastNeeded >= hold)
         {
+            Trace?.Invoke($"{key}: kept space ends after {hold.TotalSeconds:0} s: {k.Height} → {lines} lines");
             _keep[key] = (lines, now);
             return lines;
         }
+        if (_traced.Add((key, k.LastNeeded)))
+            Trace?.Invoke($"{key}: needs {lines} of {k.Height} lines; keeps {k.Height - lines} empty for up to {(hold - (now - k.LastNeeded)).TotalSeconds:0} s");
         return k.Height;
     }
 
     /// <summary>Drops the kept height of one key (its item is gone on purpose, not just smaller).</summary>
     public void Forget(string key) => _keep.Remove(key);
 
-    public void Clear() => _keep.Clear();
+    public void Clear()
+    {
+        _keep.Clear();
+        _traced.Clear();
+    }
+
+    private readonly HashSet<(string, DateTime)> _traced = new();
 }
 
 /// <summary>

@@ -81,20 +81,27 @@ internal sealed class ProcessTracker
         return Top(list, v => Format.Bytes4(v).Trim() + "/s");
     }
 
-    /// <summary>Processes with hard page faults since the last sample (at least 1/s), most first, and the total of all.</summary>
-    public (List<FaultProc>? List, double Total) HardFaults()
+    /// <summary>
+    /// Page faults per process since the last sample: hard (at least 1/s) or soft (at least 100/s),
+    /// and the totals of all processes. Display names only for the 12 busiest of each kind.
+    /// </summary>
+    public (List<FaultProc>? List, double Hard, double Soft) Faults()
     {
-        if (!_hasPrev) return (null, 0);
-        var list = new List<FaultProc>();
-        double total = 0;
+        if (!_hasPrev) return (null, 0, 0);
+        var raw = new List<(ProcSample P, double Hard, double Soft)>();
+        double hardTotal = 0, softTotal = 0;
         foreach (var (key, p) in _cur)
         {
-            if (!_prev.TryGetValue(key, out var old) || p.HardFaults < old.HardFaults) continue;
-            double rate = (p.HardFaults - old.HardFaults) / Seconds;
-            total += rate;
-            if (rate >= 1 && p.Pid > 0) list.Add(new FaultProc(p.Pid, Display(p), p.PrivateBytes, rate));
+            if (p.Pid <= 0 || !_prev.TryGetValue(key, out var old) || p.HardFaults < old.HardFaults || p.PageFaults < old.PageFaults) continue;
+            double hard = (p.HardFaults - old.HardFaults) / Seconds;
+            double soft = Math.Max(0, (p.PageFaults - old.PageFaults) / Seconds - hard);
+            hardTotal += hard;
+            softTotal += soft;
+            if (hard >= 1 || soft >= 100) raw.Add((p, hard, soft));
         }
-        return (list.OrderByDescending(f => f.HardFaultsPerSec).ToList(), total);
+        var keep = raw.OrderByDescending(x => x.Hard).Take(12).Concat(raw.OrderByDescending(x => x.Soft).Take(12)).Distinct();
+        var list = keep.Select(x => new FaultProc(x.P.Pid, Display(x.P), x.P.PrivateBytes, x.Hard, x.Soft)).ToList();
+        return (list, hardTotal, softTotal);
     }
 
     private List<ProcInfo>? Top(List<(ProcSample P, double V)> list, Func<double, string> fmt)

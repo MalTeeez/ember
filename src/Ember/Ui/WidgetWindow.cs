@@ -139,7 +139,10 @@ internal sealed class WidgetWindow : Win32Window
         float scale = _dpi / 96f;
         _pad = Math.Max(2, bg.Padding * scale);
         _targetW = (int)Math.Ceiling(Layout.Width * _text.CellWidth + 2 * _pad);
-        _targetH = (int)Math.Ceiling(Math.Max(1, lines.Count) * _text.LineHeight + 2 * _pad);
+        int newH = (int)Math.Ceiling(Math.Max(1, lines.Count) * _text.LineHeight + 2 * _pad);
+        if (newH != _targetH && Settings.DebugLog && Settings.DebugDecisions)
+            App.Log.Write($"decide: window height {_targetH} → {newH} px ({lines.Count} lines){(_shown.CY > 0 && Settings.Layout.Animate ? ", animated" : "")}");
+        _targetH = newH;
 
         BuildHits(lines);
         UpdateHoverTimer();

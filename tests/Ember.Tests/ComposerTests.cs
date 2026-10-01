@@ -219,14 +219,48 @@ public class ComposerTests
         var ok = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = 1, CommitLimitBytes = 32 * G };
         int shown = 0;
         for (int i = 0; i <= 6; i++) shown = c.Compose(Snap(i, mem: low), cfg).Count;
-        // The item hides, but its space (and the header) stays for the hold time.
+        // The item hides, but its space stays for the hold time: as empty lines at the bottom
+        // (the section header too, as it has nothing to show).
         var kept = c.Compose(Snap(8, mem: ok), cfg);
         Assert.Equal(shown, kept.Count);
-        Assert.Contains(kept, l => l.IsPadding);
-        Assert.Contains(kept, l => l.Text.Contains("memory"));
+        Assert.True(kept[^1].IsPadding);
+        Assert.DoesNotContain(kept, l => l.Text.Contains("memory"));
+        Assert.False(kept[0].IsPadding);
         var later = c.Compose(Snap(40, mem: ok), cfg);
         Assert.True(later.Count < shown);
         Assert.DoesNotContain(later, l => l.Text.Contains("memory"));
+    }
+
+    [Fact]
+    public void HeightIsKept_Inline_KeepsHeaderAndPlace()
+    {
+        var c = new StatusComposer();
+        var cfg = Cfg(hold: 30);
+        cfg.Layout.KeptSpace = "inline";
+        cfg.Intervals.HideDelaySeconds = 0;
+        const ulong G = 1024UL * 1024 * 1024;
+        var low = new MemData { AvailBytes = G / 2, TotalBytes = 16 * G, CommitBytes = 1, CommitLimitBytes = 32 * G };
+        var ok = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = 1, CommitLimitBytes = 32 * G };
+        for (int i = 0; i <= 6; i++) c.Compose(Snap(i, mem: low), cfg);
+        var kept = c.Compose(Snap(8, mem: ok), cfg);
+        int h = kept.FindIndex(l => l.Text.Contains("memory"));
+        Assert.True(h > 0);
+        Assert.True(kept[h + 1].IsPadding);
+    }
+
+    [Fact]
+    public void DecisionTrace_ReportsShowAndHeight()
+    {
+        var c = new StatusComposer();
+        var log = new List<string>();
+        c.Trace = log.Add;
+        var cfg = Cfg();
+        const ulong G = 1024UL * 1024 * 1024;
+        var low = new MemData { AvailBytes = G / 2, TotalBytes = 16 * G, CommitBytes = 1, CommitLimitBytes = 32 * G };
+        for (int i = 0; i <= 6; i++) c.Compose(Snap(i, mem: low), cfg);
+        Assert.Contains(log, m => m.StartsWith("mem.avail: over its threshold"));
+        Assert.Contains(log, m => m == "show mem.avail");
+        Assert.Contains(log, m => m.StartsWith("widget height"));
     }
 
     [Fact]

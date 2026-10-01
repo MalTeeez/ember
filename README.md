@@ -9,7 +9,7 @@ cpu   83° ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤  25% 3.6GHz     ← temperature, load 
   └ game.exe          27% i ▣ ✕      ← details, file properties, end process
 
 ── net ─────────────────────────
-↓  29M ⣴⣾⣷⣶⣤⣀⣤⣴⣾⣿⣷⣦⣄⣀⣠ 3.0k pkt     ← rate, graph, packets per second
+↓  29M ⣴⣾⣷⣶⣤⣀⣤⣴⣾⣿⣷⣦⣄⣀⣠ 3.0k pkt     ← rate, graph, packets per second (numbers coloured by the 1 h peak)
 ↑ 6.6M ⣶⣶⣦⣤⣤⣾⣷⣄⣠⣾⣿⣦⣠⣴⣶ 3.2k pkt
 
 ── gpu ─────────────────────────
@@ -82,13 +82,13 @@ To remove Ember: `.\uninstall.ps1` (as administrator). Settings and notes stay i
 - **Widget:** on the desktop layer (under normal windows). Mouse clicks go through it, except on buttons, process lines and the top row.
   - Always visible: CPU load, network down/up, Claude 5h and weekly limits.
   - Other items show only when a value crosses its threshold for 5 s, and hide after 10 s of normal values.
-  - When an item gets smaller, its space stays for 60 s (Settings → General → Motion), so lines below do not jump. A top process stays at least 15 s unless it ends. Size changes are animated.
+  - When an item gets smaller, its space stays for 60 s (Settings → General → Motion) as empty lines at the bottom of the widget, so the widget does not resize often and the remaining lines stay together (option: keep the empty lines in place). A top process stays at least 15 s unless it ends. Size changes are animated.
 - **Top row:** drag it to move the widget. Right-click it for Settings / New note / Show everything.
 - **Toolbar** (first line by default): **+** new note, one icon per minimized note (click to restore), **×** hide the widget (tray → Show widget brings it back). Tooltips show at once.
 - **Process names:** without `.exe`, plus the first argument (`python3.13 main.py`); long names are cut with `..`.
 - **Process lines** (`└ name … 27% i ▣ ✕`): **i** details window, **▣** file properties, **✕** end process (asks first). Click the line for details; right-click for more (end process tree, open file location).
 - **CPU line and hot cores:** the cpu line shows temperature (when high), graph, load and clock (with Hz). Hot cores are indented and aligned right; each shows graph and load, plus temperature (1 and 2 columns) and clock (1 column) when known. On AMD (no per-core sensor) a core shows the temperature of its CCD. A core shows when it is a load outlier, above the hot-core load (85 %), or unusually hot (10 °C above the median core, or above the CPU temperature warning). Up to 3 in one column (clock, temperature, graph), up to 6 in two (graph, temperature), up to 9 in three columns (graph; the label colour shows the temperature). More cores: the 9 with the highest score (load plus temperature) show, and one line says how many are hidden and their total use (one full core = 100 %).
-- **Disk and memory lines:** `C:  busy ⣀⣠⣴⣶⣿  98%` with `└ queued: 3 reads, 1 write` under it (drive letter, up to 3 letters for a disk with more partitions, `disk2` without a letter; queued = average read/write requests waiting, rounded), `C:  free  14GB / 500GB ▮▯▯  3%`. Memory lines have no "ram" label: `used    29GB / 32GB ▮▮▮▮▮▯▯  90%`, `commit  35GB / 40GB ▮▮▮▮▮▯▯  87%`, `hard page faults ⣀⣠⣴ 983/s` (pages read from disk), and under it each process with hard page faults: private memory (colour = share of the RAM, full at 25 %) and hard faults/s (colour = share of all hard faults). Up to 5 processes; click one for details.
+- **Disk and memory lines:** `C:  busy ⣀⣠⣴⣶⣿  98%` with `└ queued: 3 reads, 1 write` under it (drive letter, up to 3 letters for a disk with more partitions, `disk2` without a letter; queued = average read/write requests waiting, rounded), `C:  free  14GB / 500GB ▮▯▯  3%`. Memory lines have no "ram" label: `used    29GB / 32GB ▮▮▮▮▮▯▯  90%`, `commit  35GB / 40GB ▮▮▮▮▮▯▯  87%`, `hard disk paging ⣀⣠⣴ 983/s` (pages read from disk; without hard paging, high soft page faults show as `soft disk paging`), and under it each process with hard page faults: private memory (colour = share of the RAM, full at 25 %) and hard faults/s (colour = share of all hard faults). Up to 5 processes; click one for details.
 - **Usage limits** (Claude, Codex, Copilot): 2 lines each: bar and %, then the time to the reset (↻) and the projection (will last / empty … before reset, or "early" when the long text does not fit). All bars have the same length; the label column grows for long labels (week, opus, sonnet, premium). When a source gives no data, its section hides (no empty space) and stays hidden for at least 1 min.
 - **Tray icon** (amber dot): Show widget, New note, restore minimized notes, Edit layout, Show everything, Settings, Open log, Exit.
 - **Edit layout:** the widget gets a dark background and can be dragged anywhere. The position is saved as an offset from a corner of the monitor (Settings → General → Corner).
@@ -99,7 +99,7 @@ To remove Ember: `.\uninstall.ps1` (as administrator). Settings and notes stay i
   - **General → Size:** font size slider and text opacity.
   - Changes apply at once. File: `%APPDATA%\Ember\settings.json` (General → Open settings file). Example presets are in [presets/](presets/).
 - **Notes:** tray → New note, toolbar **+**, or the hotkey (default **Ctrl+Alt+N**). Drag the top bar to move, an edge to resize. The top bar has the note colour and no title; only its buttons show it: minimize (to the widget toolbar) and delete (no confirmation). Note opacity: Settings → Notes (separate from the widget). A `>` quote is italic; `>>` and deeper are also indented. Markdown is styled as you type, markers stay dim: `#`/`##`/`###` headings (larger text), `**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, fenced code blocks (```` ``` ```` or `~~~`), `>` and `>>` quotes (indented), `-` / `1.` lists, `- [ ]` checkboxes (click to tick), links `[text](url)` and bare URLs (Ctrl+click opens), `---` rules. Saved 1 s after each change to `%APPDATA%\Ember\notes\<id>.md`.
-- **Debug log:** Settings → General → Debug log. Open it with tray → **Open log** or Settings → General → **Open log** (also: Open settings file, Open data folder). File: `%APPDATA%\Ember\ember.log`.
+- **Debug log:** Settings → General → Debug log. With "Extended" on, the log also has every show/hide decision (and why), kept space, top process changes and the widget height (lines starting with `decide:`). With the debug log on, Ember also logs the Bluetooth devices and Razer HID interfaces it finds (at start and when the list changes). Open it with tray → **Open log** or Settings → General → **Open log** (also: Open settings file, Open data folder). File: `%APPDATA%\Ember\ember.log`.
 - **Second start** of `Ember.exe` brings the running widget and notes to the front.
 - **Idle:** sampling stops while the session is locked or the display is off.
 

@@ -55,17 +55,21 @@ internal sealed class BatteryMonitor : IDisposable
         try
         {
             var all = new List<DeviceBattery>();
+            // Device lists for the log (at start and when they change): help to find why a device is missing.
+            var btTrace = Log.Enabled ? new List<string>() : null;
             try
             {
-                all.AddRange(DeviceBatteries.Bluetooth());
+                all.AddRange(DeviceBatteries.Bluetooth(btTrace));
                 Log.SourceOk("battery.bluetooth");
             }
             catch (Exception ex) { Log.SourceFailed("battery.bluetooth", ex); }
+            LogTrace("Bluetooth devices", btTrace, ref _lastBt);
             if (_tick++ % 2 == 0)
             {
+                var razerTrace = Log.Enabled ? new List<string>() : null;
                 try
                 {
-                    _razer = DeviceBatteries.Razer();
+                    _razer = DeviceBatteries.Razer(razerTrace);
                     Log.SourceOk("battery.razer");
                 }
                 catch (Exception ex)
@@ -73,11 +77,23 @@ internal sealed class BatteryMonitor : IDisposable
                     _razer = new();
                     Log.SourceFailed("battery.razer", ex);
                 }
+                LogTrace("Razer HID interfaces (vendor 1532)", razerTrace, ref _lastRazer);
             }
             all.AddRange(_razer);
             _last = all.Count > 0 ? DeviceNames.Merge(all) : null;
         }
         finally { _busy = false; }
+    }
+
+    private string _lastBt = "", _lastRazer = "";
+
+    private static void LogTrace(string title, List<string>? trace, ref string last)
+    {
+        if (trace == null) return;
+        string text = trace.Count == 0 ? "none found" : string.Join("\n  ", trace);
+        if (text == last) return;
+        last = text;
+        Log.Write($"{title}:\n  {text}");
     }
 
     public void Dispose() => _timer.Dispose();

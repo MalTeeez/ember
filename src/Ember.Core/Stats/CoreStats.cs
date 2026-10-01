@@ -162,3 +162,39 @@ public static class CoreTempMap
         return result;
     }
 }
+
+/// <summary>
+/// Highest value in a sliding time window (default 1 h), in buckets (default 30 s): little memory,
+/// good enough to colour a value by how high it is compared to the last hour.
+/// </summary>
+public sealed class SlidingPeak
+{
+    private readonly List<(DateTime Start, double Max)> _buckets = new();
+    public TimeSpan Window { get; }
+    public TimeSpan Bucket { get; }
+
+    public SlidingPeak(TimeSpan? window = null, TimeSpan? bucket = null)
+    {
+        Window = window ?? TimeSpan.FromHours(1);
+        Bucket = bucket ?? TimeSpan.FromSeconds(30);
+    }
+
+    public void Add(DateTime now, double value)
+    {
+        if (double.IsNaN(value)) return;
+        int old = 0;
+        while (old < _buckets.Count && now - _buckets[old].Start >= Window) old++;
+        if (old > 0) _buckets.RemoveRange(0, old);
+        if (_buckets.Count > 0 && now >= _buckets[^1].Start && now - _buckets[^1].Start < Bucket)
+            _buckets[^1] = (_buckets[^1].Start, Math.Max(_buckets[^1].Max, value));
+        else
+            _buckets.Add((now, value));
+    }
+
+    public double Max => _buckets.Count == 0 ? 0 : _buckets.Max(b => b.Max);
+
+    /// <summary>Value as a fraction of the window peak (0..1).</summary>
+    public double Fraction(double value) => Max > 0 ? Math.Clamp(value / Max, 0, 1) : 0;
+
+    public void Clear() => _buckets.Clear();
+}

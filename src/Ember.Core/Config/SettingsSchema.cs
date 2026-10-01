@@ -143,11 +143,14 @@ public static class SettingsSchema
         yield return Number(G, "Position", "Offset Y (px at 100%)", -10000, 10000, s => s.Layout.OffsetY, (s, v) => s.Layout.OffsetY = (int)v);
         yield return Bool(G, "Motion", "Animate size changes", s => s.Layout.Animate, (s, v) => s.Layout.Animate = v);
         yield return Slider(G, "Motion", "Animation length (ms)", 0, 600, s => s.Layout.AnimationMs, (s, v) => s.Layout.AnimationMs = (int)v);
+        yield return Choice(G, "Motion", "Kept space goes to", new[] { "bottom", "inline" }, s => s.Layout.KeptSpace, (s, t) => s.Layout.KeptSpace = t);
         yield return Slider(G, "Motion", "Keep space of shrunk items (s)", 0, 600, s => s.Layout.HoldSeconds, (s, v) => s.Layout.HoldSeconds = v);
         yield return Slider(G, "Motion", "Keep top process at least (s)", 0, 120, s => s.Layout.ProcessStickSeconds, (s, v) => s.Layout.ProcessStickSeconds = v);
         yield return Bool(G, "Debug", "Show everything (ignore thresholds, sample data)", s => s.PreviewAll, (s, v) => s.PreviewAll = v,
             "For theming: every enabled item shows, missing data gets sample values.");
         yield return Bool(G, "Debug", "Debug log", s => s.DebugLog, (s, v) => s.DebugLog = v);
+        yield return Bool(G, "Debug", "Extended: log show/hide and resize decisions", s => s.DebugDecisions, (s, v) => s.DebugDecisions = v,
+            "Needs the debug log. Logs when lines show or hide (and why), kept space, top process changes and the widget height.");
         yield return Action(G, "Debug", "Open log", "app.openlog");
         yield return Action(G, "Debug", "Open settings file", "app.opensettings");
         yield return Action(G, "Debug", "Open data folder", "app.openfolder");
@@ -261,6 +264,7 @@ public static class SettingsSchema
         foreach (var f in Pair(T, "Available RAM %", 0, 100, s => s.Thresholds.AvailableRam)) yield return f;
         foreach (var f in Pair(T, "Commit charge %", 0, 100, s => s.Thresholds.Commit)) yield return f;
         foreach (var f in Pair(T, "Hard page faults /s", 0, 1e7, s => s.Thresholds.PageFaults)) yield return f;
+        foreach (var f in Pair(T, "Soft page faults /s", 0, 1e8, s => s.Thresholds.SoftPageFaults)) yield return f;
         foreach (var f in Pair(T, "Disk active %", 0, 100, s => s.Thresholds.DiskActive)) yield return f;
         foreach (var f in Pair(T, "Disk queue length", 0, 1000, s => s.Thresholds.DiskQueue)) yield return f;
         foreach (var f in Pair(T, "Free space %", 0, 100, s => s.Thresholds.FreeSpacePercent)) yield return f;

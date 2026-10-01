@@ -56,6 +56,8 @@ public sealed class ThresholdSettings
     public Threshold AvailableRam { get; set; } = new(15, 5);
     public Threshold Commit { get; set; } = new(85, 95);
     public Threshold PageFaults { get; set; } = new(1000, 5000);
+    /// <summary>Soft page faults per second (shown only without hard paging).</summary>
+    public Threshold SoftPageFaults { get; set; } = new(25000, 100000);
     // Disk
     public Threshold DiskActive { get; set; } = new(80, 95);
     public Threshold DiskQueue { get; set; } = new(2, 5);
@@ -112,6 +114,8 @@ public sealed class LayoutSettings
     /// <summary>A top process stays until another one is higher for this long.</summary>
     public double ProcessStickSeconds { get; set; } = 15;
     /// <summary>Animate size changes.</summary>
+    /// <summary>Where kept space (empty lines of shrunk items) goes: "bottom" of the widget, or "inline" (where the item was).</summary>
+    public string KeptSpace { get; set; } = "bottom";
     public bool Animate { get; set; } = true;
     public int AnimationMs { get; set; } = 160;
 }
@@ -140,6 +144,8 @@ public sealed class EmberSettings
     public LayoutSettings Layout { get; set; } = new();
     public NotesSettings Notes { get; set; } = new();
     public bool DebugLog { get; set; } = false;
+    /// <summary>Extended debug log: show/hide decisions, kept space, top process changes, widget size.</summary>
+    public bool DebugDecisions { get; set; } = false;
 
     /// <summary>True if the layout has the item and it is on.</summary>
     public bool IsOn(string id) => Entries.Any(e => e.Kind == "item" && e.Id == id && e.Enabled);
@@ -176,6 +182,7 @@ public sealed class EmberSettings
         Layout.Monitor = Math.Max(0, Layout.Monitor);
         if (string.IsNullOrWhiteSpace(Layout.Font)) Layout.Font = "Cascadia Mono";
         Notes.NewNoteHotkey ??= "";
+        Layout.KeptSpace = Layout.KeptSpace is "inline" ? "inline" : "bottom";
         Notes.Opacity = Math.Clamp(Notes.Opacity, 30, 100);
         Network.InternetHost = string.IsNullOrWhiteSpace(Network.InternetHost) ? "1.1.1.1" : Network.InternetHost.Trim();
     }
