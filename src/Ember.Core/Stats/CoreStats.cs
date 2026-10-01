@@ -163,6 +163,20 @@ public static class CoreTempMap
     }
 }
 
+/// <summary>Sum of a per-second rate over the last minute (packets per minute), from the samples of that minute.</summary>
+public sealed class MinuteSum
+{
+    private readonly Queue<(DateTime Time, double PerSecond)> _q = new();
+
+    /// <summary>Adds a sample and returns the count of the last 60 s (average rate × 60, so gaps do not count as zero).</summary>
+    public double Add(DateTime now, double perSecond)
+    {
+        _q.Enqueue((now, Math.Max(0, perSecond)));
+        while (_q.Count > 0 && now - _q.Peek().Time > TimeSpan.FromSeconds(60)) _q.Dequeue();
+        return _q.Average(x => x.PerSecond) * 60;
+    }
+}
+
 /// <summary>
 /// Highest value in a sliding time window (default 1 h), in buckets (default 30 s): little memory,
 /// good enough to colour a value by how high it is compared to the last hour.

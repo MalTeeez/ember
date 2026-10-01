@@ -51,10 +51,10 @@ public class ComposerTests
         Assert.All(lines[0].Text.Substring(10, 10), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
         Assert.StartsWith("\u2500\u2500 net \u2500", lines[2].Text);
         Assert.StartsWith("\u2193  61M ", lines[3].Text);
-        Assert.EndsWith(" pkt", lines[3].Text); // packets per second after the graph
+        Assert.EndsWith(" pkt/m", lines[3].Text); // packets of the last minute after the graph
         Assert.StartsWith("\u2191 2.1M ", lines[4].Text);
         Assert.All(lines, l => Assert.Equal(Layout.Width, l.Length));
-        Assert.All(lines[3].Text.Substring(7, 15), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
+        Assert.All(lines[3].Text.Substring(7, 14), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
     }
 
     [Fact]

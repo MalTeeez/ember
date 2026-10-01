@@ -67,8 +67,8 @@ public static class Format
     /// <summary>Clock with its unit in 6 characters: "4.8GHz", "800MHz".</summary>
     public static string Hz6(double mhz) => (Clock4(mhz).Trim() + "Hz").PadLeft(6);
 
-    /// <summary>Packets per second: "457k pkt", " 980 pkt" (4-character value, space, unit).</summary>
-    public static string Pkt(double perSecond) => Count4(perSecond) + " pkt";
+    /// <summary>Packets per minute: "457k pkt/m", " 980 pkt/m" (4-character value, space, unit).</summary>
+    public static string Pkt(double perMinute) => Count4(perMinute) + " pkt/m";
 
     /// <summary>Counts: " 980", "1.5k", " 12k".</summary>
     public static string Count4(double n)

@@ -9,7 +9,7 @@ cpu   83° ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤  25% 3.6GHz     ← temperature (when 
   └ game.exe          27% i ▣ ✕      ← details, file properties, end process
 
 ── net ─────────────────────────
-↓  29M ⣴⣾⣷⣶⣤⣀⣤⣴⣾⣿⣷⣦⣄⣀⣠ 3.0k pkt     ← rate, graph, packets per second (numbers coloured by the 1 h peak)
+↓  29M ⣴⣾⣷⣶⣤⣀⣤⣴⣾⣿⣷⣦⣄⣀⣠ 180k pkt/m   ← rate, graph, packets in the last minute (numbers coloured by the 1 h peak)
 ↑ 6.6M ⣶⣶⣦⣤⣤⣾⣷⣄⣠⣾⣿⣦⣠⣴⣶ 3.2k pkt
 
 ── gpu ─────────────────────────

@@ -31,6 +31,7 @@ public sealed class StatusComposer
     private readonly DataGate _gate = new();
     // Peaks of the last hour, to colour the network numbers by how high they are.
     private readonly Dictionary<string, SlidingPeak> _hourPeak = new();
+    private readonly Dictionary<string, MinuteSum> _pkMinute = new();
 
     private SlidingPeak HourPeak(string key, double value)
     {
@@ -84,6 +85,7 @@ public sealed class StatusComposer
         _keep.Clear();
         _gate.Clear();
         _hourPeak.Clear();
+        _pkMinute.Clear();
         _usageLabelWidth = 5;
         foreach (var s in _sticky.Values) s.Reset();
     }
@@ -542,8 +544,12 @@ public sealed class StatusComposer
             var hu = Hist("net.up");
             hu.Add(up);
             double downPk = net.Sum(a => a.DownPps), upPk = net.Sum(a => a.UpPps);
-            if (On("net.down")) items["net.down"] = new() { NetLine("↓", down, downPk, hd, _c.NetDown, bytes, HourPeak("down", down), HourPeak("down.pk", downPk)) };
-            if (On("net.up")) items["net.up"] = new() { NetLine("↑", up, upPk, hu, _c.NetUp, bytes, HourPeak("up", up), HourPeak("up.pk", upPk)) };
+            // Packets: count of the last minute (pkt/m).
+            if (!_pkMinute.TryGetValue("down", out var dm)) _pkMinute["down"] = dm = new MinuteSum();
+            if (!_pkMinute.TryGetValue("up", out var um)) _pkMinute["up"] = um = new MinuteSum();
+            double downMin = dm.Add(_now, downPk), upMin = um.Add(_now, upPk);
+            if (On("net.down")) items["net.down"] = new() { NetLine("↓", down, downMin, hd, _c.NetDown, bytes, HourPeak("down", down), HourPeak("down.pk", downMin)) };
+            if (On("net.up")) items["net.up"] = new() { NetLine("↑", up, upMin, hu, _c.NetUp, bytes, HourPeak("up", up), HourPeak("up.pk", upMin)) };
 
             // Adapter names: only when more than one physical adapter has traffic.
             var active = net.Where(a => a.DownBps + a.UpBps >= AdapterTrafficBps).ToList();
@@ -623,7 +629,7 @@ public sealed class StatusComposer
     }
 
     /// <summary>
-    /// "↓  61M ⣀⣠⣤⣴⣶⣿… 457k pkt" — rate, graph (scaled to its peak), packets per second. The numbers are
+    /// "↓  61M ⣀⣠⣤⣴⣶⣿… 457k pkt/m" — rate, graph (scaled to its peak), packets of the last minute. The numbers are
     /// coloured by how high they are compared to the highest value of the last hour.
     /// </summary>
     private Line NetLine(string arrow, double bps, double pps, History h, Rgb accent, bool bytes, SlidingPeak hour, SlidingPeak hourPk)
@@ -635,7 +641,7 @@ public sealed class StatusComposer
         b.Add(" ", _c.Dim);
         string pkt = Format.Pkt(pps);
         Graph(b, h.Values, peak <= 0 ? 1 : peak, accent, b.Column, Layout.Width - b.Column - pkt.Length - 1);
-        b.Add(" ", _c.Dim).Add(Format.Count4(pps), _c.GraphCell(hourPk.Fraction(pps), accent)).Add(" pkt", _c.Dim);
+        b.Add(" ", _c.Dim).Add(Format.Count4(pps), _c.GraphCell(hourPk.Fraction(pps), accent)).Add(" pkt/m", _c.Dim);
         return b.Build();
     }
 

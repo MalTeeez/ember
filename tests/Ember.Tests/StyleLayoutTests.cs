@@ -536,7 +536,7 @@ public class RowBackgroundTests
     {
         Assert.Equal("4.8GHz", Format.Hz6(4800));
         Assert.Equal("800MHz", Format.Hz6(800));
-        Assert.Equal("457k pkt", Format.Pkt(457_000));
+        Assert.Equal("457k pkt/m", Format.Pkt(457_000));
     }
 }
 
