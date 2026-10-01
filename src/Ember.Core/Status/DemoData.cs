@@ -70,6 +70,23 @@ public static class DemoData
                 new("op", 85, TimeSpan.FromHours(70), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(9), TimeSpan.FromHours(70))),
             };
         }
+        if (s.Codex is not { Count: > 0 })
+            s.Codex = new List<ClaudeLine>
+            {
+                new("5h", 18, TimeSpan.FromMinutes(200), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.FromHours(20), TimeSpan.FromMinutes(200)), UsageKind.Short),
+                new("wk", 64, TimeSpan.FromHours(30), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(20), TimeSpan.FromHours(30)), UsageKind.Long),
+            };
+        if (s.Copilot is not { Count: > 0 })
+            s.Copilot = new List<ClaudeLine>
+            {
+                new("prem", 57, TimeSpan.FromDays(12), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.FromDays(20), TimeSpan.FromDays(12)), UsageKind.Long),
+            };
+        if (s.Batteries is not { Count: > 0 })
+            s.Batteries = new List<Ember.Core.Devices.DeviceBattery>
+            {
+                new("DeathAdder V3 HyperSpeed", Math.Round(Wave(60, 8, 90)), false, "razer"),
+                new("WH-1000XM5", 64, null, "bluetooth"),
+            };
         return s;
     }
 

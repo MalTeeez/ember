@@ -14,6 +14,9 @@ internal sealed partial class AppHost
     private const int CmdRestoreNoteBase = 100;
 
     private ClaudePoller? _claude;
+    private CodexPoller? _codex;
+    private CopilotPoller? _copilot;
+    private BatteryMonitor? _battery;
     private NotesManager? _notes;
     private PingMonitor? _ping;
     private SettingsWindow? _settingsWindow;
@@ -22,6 +25,17 @@ internal sealed partial class AppHost
 
     private static bool PingOn(EmberSettings s) => s.IsOn("net.quality") || s.PreviewAll;
     private static bool ClaudeOn(EmberSettings s) => s.IsOn("claude.5h") || s.IsOn("claude.week") || s.IsOn("claude.models");
+    private static bool CodexOn(EmberSettings s) => s.IsOn("codex.5h") || s.IsOn("codex.week");
+    private static bool CopilotOn(EmberSettings s) => s.IsOn("copilot.premium") || s.IsOn("copilot.other");
+    private static bool BatteryOn(EmberSettings s) => s.IsOn("devices.battery");
+
+    private void ConfigurePollers(EmberSettings s)
+    {
+        _claude?.Configure(ClaudeOn(s), s.Intervals.ClaudeSeconds);
+        _codex?.Configure(CodexOn(s), s.Intervals.CodexSeconds);
+        _copilot?.Configure(CopilotOn(s), s.Intervals.CopilotSeconds);
+        _battery?.Configure(BatteryOn(s), s.Intervals.BatterySeconds);
+    }
     private static string NoteThemeKey(EmberSettings s) => $"{s.Layout.Font}|{s.Layout.FontSize}|{ThemeStore.Serialize(s.Theme)}";
 
     private void StartFeatures()
@@ -35,19 +49,30 @@ internal sealed partial class AppHost
         _ping = new PingMonitor();
         _ping.Configure(PingOn(_settings), _settings.Network.InternetHost);
         _claude = new ClaudePoller(Paths.ClaudeCredentials);
-        _claude.Configure(ClaudeOn(_settings), _settings.Intervals.ClaudeSeconds);
+        _codex = new CodexPoller();
+        _copilot = new CopilotPoller();
+        _battery = new BatteryMonitor();
+        ConfigurePollers(_settings);
         if (ClaudeOn(_settings)) _claude.Start();
+        if (CodexOn(_settings)) _codex.Start();
+        if (CopilotOn(_settings)) _copilot.Start();
     }
 
     private void PauseFeatures()
     {
         _claude?.Pause();
+        _codex?.Pause();
+        _copilot?.Pause();
+        _battery?.Pause();
         _ping?.Pause();
     }
 
     private void ResumeFeatures()
     {
         _claude?.Resume();
+        _codex?.Resume();
+        _copilot?.Resume();
+        _battery?.Resume();
         _ping?.Resume();
     }
 
@@ -72,6 +97,12 @@ internal sealed partial class AppHost
         W.UnregisterHotKey(Handle, NewNoteHotkeyId);
         _claude?.Dispose();
         _claude = null;
+        _codex?.Dispose();
+        _codex = null;
+        _copilot?.Dispose();
+        _copilot = null;
+        _battery?.Dispose();
+        _battery = null;
         _ping?.Dispose();
         _ping = null;
         Tooltip.HideShared();
@@ -79,7 +110,7 @@ internal sealed partial class AppHost
 
     private void OnSettingsChanged(EmberSettings s)
     {
-        _claude?.Configure(ClaudeOn(s), s.Intervals.ClaudeSeconds);
+        ConfigurePollers(s);
         RegisterNoteHotkey(s.Notes.NewNoteHotkey);
         _ping?.Configure(PingOn(s), s.Network.InternetHost);
         string key = NoteThemeKey(s);
@@ -163,7 +194,11 @@ internal sealed partial class AppHost
     private Snapshot Decorate(Snapshot s)
     {
         var cfg = _settings;
-        if (ClaudeOn(cfg)) s.Claude = _claude?.Lines(DateTimeOffset.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+        if (ClaudeOn(cfg)) s.Claude = _claude?.Lines(now);
+        if (CodexOn(cfg)) s.Codex = _codex?.Lines(now);
+        if (CopilotOn(cfg)) s.Copilot = _copilot?.Lines(now);
+        if (BatteryOn(cfg)) s.Batteries = _battery?.Batteries;
         if (PingOn(cfg)) s.Quality = _ping?.Quality();
         return s;
     }

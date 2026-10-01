@@ -32,6 +32,8 @@ wk   ::::::::::::::::::::::  71%
 - Windows 10 or 11, x64.
 - Admin rights once, for the install (scheduled task) and for CPU temperatures (LibreHardwareMonitor kernel driver).
 - For Claude usage: Claude Code installed and logged in (`%USERPROFILE%\.claude\.credentials.json`).
+- For Codex usage: the Codex CLI logged in with a ChatGPT plan (`%USERPROFILE%\.codex\auth.json`, or `%CODEX_HOME%`).
+- For Copilot usage: a Copilot editor plugin that keeps `%LOCALAPPDATA%\github-copilot\apps.json` (JetBrains, Vim/Neovim, Visual Studio), or the GitHub CLI logged in (`gh auth login`). The VS Code extension keeps its token in VS Code's own store, which Ember cannot read; use `gh` then.
 
 ## Download
 
@@ -98,6 +100,19 @@ To remove Ember: `.\uninstall.ps1` (as administrator). Settings and notes stay i
 - **Second start** of `Ember.exe` brings the running widget and notes to the front.
 - **Idle:** sampling stops while the session is locked or the display is off.
 
+### Codex and Copilot usage
+
+- **Codex** (`── codex`): the 5 h and weekly plan windows, from the same data as `/status` in the Codex CLI (`https://chatgpt.com/backend-api/wham/usage`). Same lines and projection as Claude. Every 1 min.
+- **Copilot** (`── copilot`): premium requests this month (`prem`) with time to the monthly reset and a projection; on the Free plan also the chat and completions quotas. From `https://api.github.com/copilot_internal/user`, the data the Copilot editor status uses. Every 5 min. Unlimited quotas are not shown.
+- Both endpoints are not documented and can change. Tokens are only read, never refreshed. Any failure hides the lines; HTTP 429 doubles the interval.
+
+### Device batteries
+
+`── devices`: one line per device with a battery: name, bar and %. Red below 15 %, amber below 30 % (Settings → Thresholds). Settings → Layout → "Device batteries always" off shows them only when low. Every 60 s.
+
+- **Bluetooth** (classic and LE): the battery level that Windows itself shows in Settings → Bluetooth & devices. Devices that do not report a level to Windows (many mice with their own software) do not show.
+- **Razer HyperSpeed / wireless receivers** (for example the DeathAdder V3 HyperSpeed, receiver 1532:00C5): Ember asks the receiver with the Razer protocol (the same feature report as Razer Synapse and OpenRazer). When the mouse sleeps or is off, the receiver gives no level and the line hides. Other wireless mice (Logitech, SteelSeries, …) use their own protocols and are not supported.
+
 ### Claude usage
 
 Ember reads the OAuth token of Claude Code and calls the same endpoint as `/usage` in Claude Code (`https://api.anthropic.com/api/oauth/usage`). This endpoint is not documented and can change. Ember never refreshes the token: when the token has expired, the Claude lines hide until Claude Code refreshes it. Every 1 min by default; on HTTP 429 the interval doubles until a request succeeds.
@@ -119,10 +134,11 @@ This version was written and built on Linux. No Windows machine was available. T
 7. **DPI:** 100–200 %, moving between monitors with different DPI.
 8. **Sensors:** PDH counter names and values (`% Processor Utility`, `% Processor Performance`, `Processor Frequency` per core, GPU Engine, GPU Adapter Memory, PhysicalDisk, Pages Input/sec); hybrid CPU core groups; per-core temperature mapping from LHM ("CPU Core #n", "P-Core #n"/"E-Core #n") to logical cores; GetIfTable2 adapter filter; DXGI adapter list and model labels; LibreHardwareMonitor temperatures (Intel and AMD).
 9. **Process actions:** details window (look, buttons, Copy), file properties dialog, end process (confirmation), end tree, open location, with and without admin rights.
-10. **Claude usage:** real request with a real token, expired token, HTTP 401/429, projection on live data.
-11. **Network quality** pings to the gateway and 1.1.1.1.
-12. **Notes:** title bar and buttons, minimize to the toolbar and restore, delete, resize, RichEdit styling (heading sizes, quote indents, code background, strike, links, Ctrl+click), undo not affected by styling (TOM `Undo(tomSuspend)`), saving and loading.
-13. **Settings window:** page list, scrolling, sliders, colour picker, layout editor, theme/layout import and export (file dialogs), Tab navigation, start-at-logon toggle with UAC.
-14. **install.ps1 / uninstall.ps1** and the scheduled task.
-15. **Robustness:** Explorer restart, lock/unlock, display off/on, single instance against an elevated instance, sleep/resume.
-16. **Resource targets:** RAM < 60 MB, CPU < 1 %, GPU ≈ 0 % — not measured.
+10. **Claude, Codex and Copilot usage:** real requests with real tokens (Claude credentials, Codex auth.json with the ChatGPT-Account-Id header, Copilot token from apps.json or `gh auth token`), expired tokens, HTTP 401/403/429, projections on live data, Copilot monthly reset date.
+11. **Device batteries:** Bluetooth battery levels through the device property (which devices report one), stale values of disconnected devices, Razer DeathAdder V3 HyperSpeed receiver (transaction id, answer while the mouse sleeps, charging flag, conflicts with Razer Synapse running at the same time).
+12. **Network quality** pings to the gateway and 1.1.1.1.
+13. **Notes:** title bar and buttons, minimize to the toolbar and restore, delete, resize, RichEdit styling (heading sizes, quote indents, code background, strike, links, Ctrl+click), undo not affected by styling (TOM `Undo(tomSuspend)`), saving and loading.
+14. **Settings window:** page list, scrolling, sliders, colour picker, layout editor, theme/layout import and export (file dialogs), Tab navigation, start-at-logon toggle with UAC.
+15. **install.ps1 / uninstall.ps1** and the scheduled task.
+16. **Robustness:** Explorer restart, lock/unlock, display off/on, single instance against an elevated instance, sleep/resume.
+17. **Resource targets:** RAM < 60 MB, CPU < 1 %, GPU ≈ 0 % — not measured.

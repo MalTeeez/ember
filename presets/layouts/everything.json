@@ -188,6 +188,78 @@
       "Id": "claude.models",
       "Enabled": true,
       "Collapse": true
+    },
+    {
+      "Kind": "spacer",
+      "Id": "spacer",
+      "Enabled": true,
+      "Preset": "dots",
+      "Collapse": true
+    },
+    {
+      "Kind": "header",
+      "Id": "header",
+      "Enabled": true,
+      "Text": "codex",
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "codex.5h",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "codex.week",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "spacer",
+      "Id": "spacer",
+      "Enabled": true,
+      "Preset": "dots",
+      "Collapse": true
+    },
+    {
+      "Kind": "header",
+      "Id": "header",
+      "Enabled": true,
+      "Text": "copilot",
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "copilot.premium",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "copilot.other",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "spacer",
+      "Id": "spacer",
+      "Enabled": true,
+      "Preset": "dots",
+      "Collapse": true
+    },
+    {
+      "Kind": "header",
+      "Id": "header",
+      "Enabled": true,
+      "Text": "devices",
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "devices.battery",
+      "Enabled": true,
+      "Collapse": true
     }
   ]
 }

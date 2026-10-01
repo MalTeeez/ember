@@ -93,7 +93,10 @@ public sealed class StatusComposer
         ComposeGpu(s, items);
         ComposeMemory(s, items);
         ComposeDisk(s, items);
-        ComposeClaude(s, items);
+        ComposeUsage(s.Claude, items, "claude.5h", "claude.week", "claude.models", _c.Claude);
+        ComposeUsage(s.Codex, items, "codex.5h", "codex.week", "codex.week", _c.Codex);
+        ComposeUsage(s.Copilot, items, "copilot.premium", "copilot.premium", "copilot.other", _c.Copilot);
+        ComposeBatteries(s, items);
 
         _vis.EndTick();
         foreach (var k in _hist.Keys.Where(k => !_usedHist.Contains(k)).ToList()) _hist.Remove(k);
@@ -613,18 +616,45 @@ public sealed class StatusComposer
 
     // ───────────── Claude ─────────────
 
-    private void ComposeClaude(Snapshot s, Dictionary<string, List<Line>> items)
+    /// <summary>Usage limits of one provider (Claude, Codex, Copilot): short, long and extra windows to their layout items.</summary>
+    private void ComposeUsage(IReadOnlyList<ClaudeLine>? usage, Dictionary<string, List<Line>> items, string shortId, string longId, string extraId, Rgb accent)
     {
-        if (s.Claude is not { Count: > 0 } cl) return;
+        if (usage is not { Count: > 0 }) return;
         var proj = _cfg.Thresholds.ClaudeProjection;
         bool projection = _cfg.Fields.ClaudeProjection;
-        foreach (var c in cl)
+        foreach (var c in usage)
         {
-            string id = c.Label switch { "5h" => "claude.5h", "wk" => "claude.week", _ => "claude.models" };
+            string id = c.ResolvedKind switch { UsageKind.Short => shortId, UsageKind.Long => longId, _ => extraId };
             if (!On(id)) continue;
             if (!items.TryGetValue(id, out var list)) items[id] = list = new();
-            list.AddRange(ClaudeLines(c, proj, projection));
+            list.AddRange(ClaudeLines(c, proj, projection, accent));
         }
+    }
+
+    /// <summary>
+    /// "DeathAdder V3 Hyp… ▮▮▮▮▮▯▯▯  67%" — one line per device, lowest battery first in colour.
+    /// Shown always, or only when low (Fields.BatteryAlways).
+    /// </summary>
+    private void ComposeBatteries(Snapshot s, Dictionary<string, List<Line>> items)
+    {
+        if (!On("devices.battery") || s.Batteries is not { Count: > 0 } list) return;
+        var th = _cfg.Thresholds.Battery;
+        var lines = new List<Line>();
+        foreach (var d in list)
+        {
+            bool low = th.Crossed(d.Percent);
+            if (!_cfg.Fields.BatteryAlways && !Vis("bat." + d.Name, low)) continue;
+            var c = _c.Severity(d.Percent, th.Warn, th.Crit);
+            var b = new LineBuilder();
+            string name = d.Charging == true ? Format.Fit(d.Name, 14).TrimEnd().PadRight(14) + " +" : Format.Fit(d.Name, 16);
+            b.Add(name.Length > 16 ? name[..16] : name.PadRight(16), _c.Device).Add(" ", _c.Dim);
+            var (bar, filled) = Glyphs.StyledBar(d.Percent / 100.0, 10, _c.Theme.BarStyle);
+            for (int i = 0; i < bar.Length; i++) b.Add(bar[i].ToString(), i < filled ? c : _c.Dim);
+            b.Add(" ", _c.Dim);
+            Val(b, Format.Pct4(d.Percent), c);
+            lines.Add(b.Build());
+        }
+        items["devices.battery"] = lines;
     }
 
     /// <summary>
@@ -632,16 +662,17 @@ public sealed class StatusComposer
     /// "  ↻ refresh ············ 3h10m"
     /// "  ◷ will last"  or  "  ⚠ empty 1d22h before reset"
     /// </summary>
-    public IEnumerable<Line> ClaudeLines(ClaudeLine c, Threshold projection, bool showProjection = true)
+    public IEnumerable<Line> ClaudeLines(ClaudeLine c, Threshold projection, bool showProjection = true, Rgb? accentColor = null)
     {
+        var accent = accentColor ?? _c.Claude;
         const int barWidth = 22;
         var theme = _c.Theme;
-        var b = Label(c.Label, _c.Claude);
+        var b = Label(c.Label, accent);
         var (bar, filled) = Glyphs.StyledBar(c.Used / 100.0, barWidth, theme.BarStyle);
         for (int i = 0; i < bar.Length; i++)
         {
             bool on = i < filled;
-            var color = !on ? _c.Dim : theme.BarGradient ? Rgb.Stops(_c.GraphStops, (i + 0.5) / barWidth) : _c.Claude;
+            var color = !on ? _c.Dim : theme.BarGradient ? Rgb.Stops(_c.GraphStops, (i + 0.5) / barWidth) : accent;
             b.Add(bar[i].ToString(), color, on && theme.BoldValues ? RunStyle.Bold : RunStyle.None);
         }
         b.Add(" ", _c.Dim);

@@ -162,6 +162,7 @@ public static class SettingsSchema
         yield return Bool(L, "Fields", "GPU temperature", s => s.Fields.GpuTemp, (s, v) => s.Fields.GpuTemp = v);
         yield return Bool(L, "Fields", "Claude projection line", s => s.Fields.ClaudeProjection, (s, v) => s.Fields.ClaudeProjection = v);
         yield return Bool(L, "Fields", "Network in bytes (not bits)", s => s.Fields.NetBytes, (s, v) => s.Fields.NetBytes = v);
+        yield return Bool(L, "Fields", "Device batteries always (off: only when low)", s => s.Fields.BatteryAlways, (s, v) => s.Fields.BatteryAlways = v);
 
         // ── Appearance ──
         const string A = "Appearance";
@@ -223,6 +224,9 @@ public static class SettingsSchema
         yield return Color(A, C, "Memory", s => s.Theme.Memory, (s, v) => s.Theme.Memory = v);
         yield return Color(A, C, "Disk", s => s.Theme.Disk, (s, v) => s.Theme.Disk = v);
         yield return Color(A, C, "Claude", s => s.Theme.Claude, (s, v) => s.Theme.Claude = v);
+        yield return Color(A, C, "Codex", s => s.Theme.Codex, (s, v) => s.Theme.Codex = v);
+        yield return Color(A, C, "Copilot", s => s.Theme.Copilot, (s, v) => s.Theme.Copilot = v);
+        yield return Color(A, C, "Devices", s => s.Theme.Device, (s, v) => s.Theme.Device = v);
         yield return Color(A, C, "Process names", s => s.Theme.Process, (s, v) => s.Theme.Process = v);
 
         // ── Thresholds ──
@@ -249,12 +253,16 @@ public static class SettingsSchema
         foreach (var f in Pair(T, "Packet loss %", 0, 100, s => s.Thresholds.PacketLoss)) yield return f;
         foreach (var f in Pair(T, "Gateway latency ms", 0, 10000, s => s.Thresholds.GatewayLatency)) yield return f;
         foreach (var f in Pair(T, "Internet latency ms", 0, 10000, s => s.Thresholds.InternetLatency)) yield return f;
-        foreach (var f in Pair(T, "Claude: reset ÷ limit time", 0, 100, s => s.Thresholds.ClaudeProjection)) yield return f;
+        foreach (var f in Pair(T, "Claude/Codex/Copilot: reset ÷ limit time", 0, 100, s => s.Thresholds.ClaudeProjection)) yield return f;
+        foreach (var f in Pair(T, "Device battery %", 0, 100, s => s.Thresholds.Battery)) yield return f;
 
         // ── Intervals ──
         const string V = "Intervals";
         yield return Number(V, "", "Sensors (s)", 0.25, 60, s => s.Intervals.SensorSeconds, (s, v) => s.Intervals.SensorSeconds = v);
         yield return Number(V, "", "Claude usage (s)", 15, 3600, s => s.Intervals.ClaudeSeconds, (s, v) => s.Intervals.ClaudeSeconds = v);
+        yield return Number(V, "", "Codex usage (s)", 15, 3600, s => s.Intervals.CodexSeconds, (s, v) => s.Intervals.CodexSeconds = v);
+        yield return Number(V, "", "Copilot usage (s)", 60, 3600, s => s.Intervals.CopilotSeconds, (s, v) => s.Intervals.CopilotSeconds = v);
+        yield return Number(V, "", "Device batteries (s)", 10, 3600, s => s.Intervals.BatterySeconds, (s, v) => s.Intervals.BatterySeconds = v);
         yield return Number(V, "", "Show delay (s)", 0, 600, s => s.Intervals.ShowDelaySeconds, (s, v) => s.Intervals.ShowDelaySeconds = v);
         yield return Number(V, "", "Hide delay (s)", 0, 600, s => s.Intervals.HideDelaySeconds, (s, v) => s.Intervals.HideDelaySeconds = v);
 

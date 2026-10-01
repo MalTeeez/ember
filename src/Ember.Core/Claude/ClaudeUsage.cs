@@ -41,12 +41,20 @@ public sealed record OAuthToken(string AccessToken, DateTimeOffset? ExpiresAt)
     }
 }
 
-/// <summary>One usage window.</summary>
-public sealed record UsageWindow(double Utilization, DateTimeOffset? ResetsAt);
+/// <summary>One usage window. Length = window length (null: 5 h for the short, 7 days for the long window).</summary>
+public sealed record UsageWindow(double Utilization, DateTimeOffset? ResetsAt, TimeSpan? Length = null);
 
-/// <summary>Parsed usage response.</summary>
+/// <summary>
+/// Parsed usage of one provider: a short window (Claude/Codex 5 h), a long window (weekly, or Copilot's
+/// monthly premium requests) and extra windows (per-model limits, Copilot chat/completions).
+/// </summary>
 public sealed record UsageData(UsageWindow? FiveHour, UsageWindow? SevenDay, IReadOnlyList<(string Model, UsageWindow Window)> Models)
 {
+    public string ShortLabel { get; init; } = "5h";
+    public string LongLabel { get; init; } = "wk";
+    /// <summary>Show extra windows always (Copilot), not only when higher than the long window (Claude models).</summary>
+    public bool ModelsAlways { get; init; }
+
     /// <summary>Null if the JSON is not valid or has neither window.</summary>
     public static UsageData? Parse(string json)
     {

@@ -139,6 +139,36 @@
       "Id": "claude.models",
       "Enabled": false,
       "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "codex.5h",
+      "Enabled": false,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "codex.week",
+      "Enabled": false,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "copilot.premium",
+      "Enabled": false,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "copilot.other",
+      "Enabled": false,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "devices.battery",
+      "Enabled": false,
+      "Collapse": true
     }
   ]
 }

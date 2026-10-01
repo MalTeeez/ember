@@ -16,6 +16,9 @@
   "Memory": "#FFAF5F",
   "Disk": "#AF87FF",
   "Claude": "#D7875F",
+  "Codex": "#8FB8FF",
+  "Copilot": "#B79CFF",
+  "Device": "#9FD6A0",
   "Process": "#EEEEEE",
   "GraphColoring": "intensity",
   "GraphStops": [

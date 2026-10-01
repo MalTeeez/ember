@@ -97,11 +97,17 @@ public sealed class FiveHourRate
     }
 }
 
-/// <summary>One Claude line for the widget.</summary>
-public sealed record ClaudeLine(string Label, double Used, TimeSpan? ResetIn, ProjectionResult Projection);
+public enum UsageKind { Auto, Short, Long, Extra }
 
-/// <summary>Keeps the latest usage data and creates the Claude lines.</summary>
-public sealed class ClaudeTracker
+/// <summary>One usage limit for the widget (Claude, Codex or Copilot).</summary>
+public sealed record ClaudeLine(string Label, double Used, TimeSpan? ResetIn, ProjectionResult Projection, UsageKind Kind = UsageKind.Auto)
+{
+    /// <summary>Kind from the label when not set ("5h" short, "wk" long, others extra).</summary>
+    public UsageKind ResolvedKind => Kind != UsageKind.Auto ? Kind : Label switch { "5h" => UsageKind.Short, "wk" => UsageKind.Long, _ => UsageKind.Extra };
+}
+
+/// <summary>Keeps the latest usage data of one provider and creates its lines.</summary>
+public class UsageTracker
 {
     private readonly FiveHourRate _rate = new();
     public UsageData? Data { get; private set; }
@@ -114,7 +120,7 @@ public sealed class ClaudeTracker
         if (data.FiveHour is { } f) _rate.Add(now, f.Utilization, f.ResetsAt);
     }
 
-    /// <summary>Hide the Claude lines (token expired, request failed).</summary>
+    /// <summary>Hide the lines (token expired, request failed).</summary>
     public void Fail() => Data = null;
 
     public IReadOnlyList<ClaudeLine> Lines(DateTimeOffset now)
@@ -122,18 +128,21 @@ public sealed class ClaudeTracker
         var lines = new List<ClaudeLine>();
         if (Data is not { } d) return lines;
         if (d.FiveHour is { } f)
-            lines.Add(new ClaudeLine("5h", f.Utilization, ResetIn(f, now),
-                Projection.Compute(f.Utilization, f.ResetsAt, now, Projection.FiveHours, _rate.Rate(now))));
-        if (d.SevenDay is { } w)
         {
-            lines.Add(new ClaudeLine("wk", w.Utilization, ResetIn(w, now),
-                Projection.Compute(w.Utilization, w.ResetsAt, now, Projection.SevenDays)));
-            // Per-model weekly limit: only if higher than the general weekly limit.
-            foreach (var (model, mw) in d.Models)
-                if (mw.Utilization > w.Utilization)
-                    lines.Add(new ClaudeLine(ModelLabel(model), mw.Utilization, ResetIn(mw, now),
-                        Projection.Compute(mw.Utilization, mw.ResetsAt, now, Projection.SevenDays)));
+            // The short window follows the current pace (last 30 min of own samples) when the window is about 5 h.
+            var len = f.Length ?? Projection.FiveHours;
+            double? rate = Math.Abs((len - Projection.FiveHours).TotalMinutes) < 1 ? _rate.Rate(now) : null;
+            lines.Add(new ClaudeLine(d.ShortLabel, f.Utilization, ResetIn(f, now),
+                Projection.Compute(f.Utilization, f.ResetsAt, now, len, rate), UsageKind.Short));
         }
+        if (d.SevenDay is { } w)
+            lines.Add(new ClaudeLine(d.LongLabel, w.Utilization, ResetIn(w, now),
+                Projection.Compute(w.Utilization, w.ResetsAt, now, w.Length ?? Projection.SevenDays), UsageKind.Long));
+        // Extra windows (Claude per-model weekly limits: only if higher than the general weekly limit).
+        foreach (var (model, mw) in d.Models)
+            if (d.ModelsAlways || (d.SevenDay is { } wk && mw.Utilization > wk.Utilization))
+                lines.Add(new ClaudeLine(d.ModelsAlways ? model : ModelLabel(model), mw.Utilization, ResetIn(mw, now),
+                    Projection.Compute(mw.Utilization, mw.ResetsAt, now, mw.Length ?? Projection.SevenDays), UsageKind.Extra));
         return lines;
     }
 
@@ -148,3 +157,6 @@ public sealed class ClaudeTracker
         var m => m.Length <= 3 ? m : m[..3],
     };
 }
+
+/// <summary>The Claude tracker (same as <see cref="UsageTracker"/>).</summary>
+public sealed class ClaudeTracker : UsageTracker { }

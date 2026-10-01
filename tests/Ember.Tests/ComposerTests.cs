@@ -60,6 +60,7 @@ public class ComposerTests
         foreach (var l in c.Compose(Snap(0), cfg))
         {
             var t = l.Text;
+            if (t.StartsWith("DeathAdder") || t.StartsWith("WH-")) continue; // device battery lines: name, bar, %
             // A label is followed by at least one space before its value (labels are at most 4 characters).
             if (char.IsLetterOrDigit(t[0]) || t[0] is '\u2193' or '\u2191') Assert.True(t.IndexOf(' ') is > 0 and <= 4, t);
         }

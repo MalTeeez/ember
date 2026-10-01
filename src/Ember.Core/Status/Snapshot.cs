@@ -68,6 +68,10 @@ public sealed class Snapshot
     public IReadOnlyList<ProcInfo>? TopMem { get; set; }
     public IReadOnlyList<ProcInfo>? TopDisk { get; set; }
     public IReadOnlyList<ClaudeLine>? Claude { get; set; }
+    public IReadOnlyList<ClaudeLine>? Codex { get; set; }
+    public IReadOnlyList<ClaudeLine>? Copilot { get; set; }
+    /// <summary>Batteries of Bluetooth devices and Razer wireless receivers.</summary>
+    public IReadOnlyList<Ember.Core.Devices.DeviceBattery>? Batteries { get; set; }
 }
 
 /// <summary>What the sampler must collect for the next samples (process scans are costly).</summary>

@@ -30,6 +30,8 @@ public sealed class FieldSettings
     public bool ClaudeProjection { get; set; } = true;
     /// <summary>Network in bytes per second instead of bits.</summary>
     public bool NetBytes { get; set; } = false;
+    /// <summary>Device batteries: always shown (false = only when below the warning value).</summary>
+    public bool BatteryAlways { get; set; } = true;
 }
 
 public sealed class ThresholdSettings
@@ -65,12 +67,17 @@ public sealed class ThresholdSettings
     public Threshold InternetLatency { get; set; } = new(100, 200);
     // Claude: ratio (time to reset) / (time to limit). 1 = limit exactly at reset.
     public Threshold ClaudeProjection { get; set; } = new(1, 2);
+    // Device batteries (lower is worse)
+    public Threshold Battery { get; set; } = new(30, 15);
 }
 
 public sealed class IntervalSettings
 {
     public double SensorSeconds { get; set; } = 1;
     public double ClaudeSeconds { get; set; } = 60;
+    public double CodexSeconds { get; set; } = 60;
+    public double CopilotSeconds { get; set; } = 300;
+    public double BatterySeconds { get; set; } = 60;
     public double ShowDelaySeconds { get; set; } = 5;
     public double HideDelaySeconds { get; set; } = 10;
 }
@@ -135,11 +142,14 @@ public sealed class EmberSettings
     public void Normalize()
     {
         Fields ??= new(); Theme ??= new(); Theme.Background ??= new(); Theme.GraphStops ??= new();
-        Entries = LayoutPreset.Normalize(Entries);
+        Entries = LayoutPreset.Normalize(Entries, addMissingAsDefault: true);
         Thresholds ??= new(); Intervals ??= new(); Network ??= new(); Layout ??= new(); Notes ??= new();
         Network.ExcludedAdapters ??= new();
         Intervals.SensorSeconds = Math.Clamp(Intervals.SensorSeconds, 0.25, 60);
         Intervals.ClaudeSeconds = Math.Clamp(Intervals.ClaudeSeconds, 15, 3600);
+        Intervals.CodexSeconds = Math.Clamp(Intervals.CodexSeconds, 15, 3600);
+        Intervals.CopilotSeconds = Math.Clamp(Intervals.CopilotSeconds, 60, 3600);
+        Intervals.BatterySeconds = Math.Clamp(Intervals.BatterySeconds, 10, 3600);
         Intervals.ShowDelaySeconds = Math.Clamp(Intervals.ShowDelaySeconds, 0, 600);
         Intervals.HideDelaySeconds = Math.Clamp(Intervals.HideDelaySeconds, 0, 600);
         Layout.FontSize = Math.Clamp(Layout.FontSize, 6, 32);

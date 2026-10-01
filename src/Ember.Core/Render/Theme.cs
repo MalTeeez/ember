@@ -30,6 +30,9 @@ public sealed class Theme
     public string Memory { get; set; } = "#8CC8FF";
     public string Disk { get; set; } = "#F7D06B";
     public string Claude { get; set; } = "#E8A27C";
+    public string Codex { get; set; } = "#8FB8FF";
+    public string Copilot { get; set; } = "#B79CFF";
+    public string Device { get; set; } = "#9FD6A0";
     public string Process { get; set; } = "#D8CFC6";
 
     /// <summary>"intensity" (each graph cell coloured by its value, btop style), "category" (accent colour), "mono" (text colour).</summary>
@@ -79,7 +82,7 @@ public sealed class BackgroundTheme
 public sealed class ThemeColors
 {
     public Rgb Text, Label, Unit, Dim, Header, Rule, Icon, Warn, Crit;
-    public Rgb Cpu, NetDown, NetUp, Gpu, Memory, Disk, Claude, Process;
+    public Rgb Cpu, NetDown, NetUp, Gpu, Memory, Disk, Claude, Codex, Copilot, Device, Process;
     public IReadOnlyList<Rgb> GraphStops = Array.Empty<Rgb>();
     public Theme Theme = new();
 
@@ -106,6 +109,9 @@ public sealed class ThemeColors
         c.Memory = P(t.Memory, c.Text);
         c.Disk = P(t.Disk, c.Text);
         c.Claude = P(t.Claude, c.Text);
+        c.Codex = P(t.Codex, c.Text);
+        c.Copilot = P(t.Copilot, c.Text);
+        c.Device = P(t.Device, c.Text);
         c.Process = P(t.Process, c.Text);
         var stops = (t.GraphStops ?? new()).Select(s => P(s, c.Text)).ToList();
         if (stops.Count == 0) stops.Add(c.Text);

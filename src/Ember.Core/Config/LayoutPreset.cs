@@ -64,6 +64,11 @@ public static class ItemCatalog
         new("claude.5h", "Claude 5h limit", "claude"),
         new("claude.week", "Claude weekly limit", "claude"),
         new("claude.models", "Claude per-model weekly limits", "claude"),
+        new("codex.5h", "Codex 5h limit", "codex"),
+        new("codex.week", "Codex weekly limit", "codex"),
+        new("copilot.premium", "Copilot premium requests (monthly)", "copilot"),
+        new("copilot.other", "Copilot chat / completions quotas (Free plan)", "copilot"),
+        new("devices.battery", "Device batteries (Bluetooth, Razer wireless)", "devices"),
     };
 
     public static string Title(string id) => All.FirstOrDefault(i => i.Id == id)?.Title ?? id;
@@ -100,7 +105,12 @@ public sealed class LayoutPreset
         catch (JsonException) { return null; }
     }
 
-    public static List<LayoutEntry> Normalize(List<LayoutEntry>? entries)
+    /// <param name="addMissingAsDefault">
+    /// false (import): missing items are added at the end, switched off.
+    /// true (settings of an older version): missing items are added like in the default layout
+    /// (on/off as there, with their section header), so new features show.
+    /// </param>
+    public static List<LayoutEntry> Normalize(List<LayoutEntry>? entries, bool addMissingAsDefault = false)
     {
         var list = new List<LayoutEntry>();
         var seen = new HashSet<string>();
@@ -115,8 +125,24 @@ public sealed class LayoutPreset
             else e.Id = e.Kind;
             list.Add(e);
         }
-        foreach (var i in ItemCatalog.All)
-            if (!seen.Contains(i.Id)) list.Add(LayoutEntry.Item(i.Id, enabled: false));
+        var missing = ItemCatalog.All.Where(i => !seen.Contains(i.Id)).ToList();
+        if (!addMissingAsDefault)
+        {
+            foreach (var i in missing) list.Add(LayoutEntry.Item(i.Id, enabled: false));
+            return list;
+        }
+        var defaults = Default().Entries;
+        foreach (var group in missing.GroupBy(i => i.Group))
+        {
+            bool newGroup = !ItemCatalog.All.Any(i => i.Group == group.Key && seen.Contains(i.Id));
+            if (newGroup && group.Key is not ("cpu" or "network" or "widget"))
+            {
+                list.Add(LayoutEntry.Spacer());
+                list.Add(LayoutEntry.Header(group.Key));
+            }
+            foreach (var i in group)
+                list.Add(LayoutEntry.Item(i.Id, defaults.FirstOrDefault(d => d.Id == i.Id)?.Enabled ?? false));
+        }
         return list;
     }
 
@@ -143,6 +169,12 @@ public sealed class LayoutPreset
             LayoutEntry.Item("disk.busy"), LayoutEntry.Item("disk.free"), LayoutEntry.Item("disk.top"),
             LayoutEntry.Spacer(), LayoutEntry.Header("claude"),
             LayoutEntry.Item("claude.5h"), LayoutEntry.Item("claude.week"), LayoutEntry.Item("claude.models"),
+            LayoutEntry.Spacer(), LayoutEntry.Header("codex"),
+            LayoutEntry.Item("codex.5h"), LayoutEntry.Item("codex.week"),
+            LayoutEntry.Spacer(), LayoutEntry.Header("copilot"),
+            LayoutEntry.Item("copilot.premium"), LayoutEntry.Item("copilot.other"),
+            LayoutEntry.Spacer(), LayoutEntry.Header("devices"),
+            LayoutEntry.Item("devices.battery"),
         },
     };
 
