@@ -119,6 +119,8 @@ public sealed class LayoutSettings
 public sealed class NotesSettings
 {
     public string NewNoteHotkey { get; set; } = "Ctrl+Alt+N";
+    /// <summary>Opacity of the notes in % (30..100). Independent of the widget's opacity settings.</summary>
+    public int Opacity { get; set; } = 100;
 }
 
 public sealed class EmberSettings
@@ -174,6 +176,7 @@ public sealed class EmberSettings
         Layout.Monitor = Math.Max(0, Layout.Monitor);
         if (string.IsNullOrWhiteSpace(Layout.Font)) Layout.Font = "Cascadia Mono";
         Notes.NewNoteHotkey ??= "";
+        Notes.Opacity = Math.Clamp(Notes.Opacity, 30, 100);
         Network.InternetHost = string.IsNullOrWhiteSpace(Network.InternetHost) ? "1.1.1.1" : Network.InternetHost.Trim();
     }
 }

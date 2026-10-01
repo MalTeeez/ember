@@ -166,4 +166,4 @@ These decisions replace older ones where they conflict (noted in brackets).
 | Y14 | **Settings scrolling:** drawing is off while all controls move, then the window and controls redraw once. | Fixes tearing, mostly when scrolling up. |
 | Y15 | **Preset lists** show the chosen theme/layout name (`Theme.Name`, `LayoutName`); an empty entry stays for "keep as is". | Requested. |
 | Y16 | **Open log:** tray menu and Settings → General → Debug (with Open settings file and Open data folder). Opens with the default program (Notepad if none); makes a short log first if none exists. | Requested. |
-
+| Y17 | **Notes look:** the top bar has the same colour as the note and shows no title; only the minimize and delete icons show it. Notes have their own opacity (Settings → Notes, default 100 %, 30–100); the widget background and text opacity do not change them. [replaces V18 title bar and the 75 % rule] | Requested. |

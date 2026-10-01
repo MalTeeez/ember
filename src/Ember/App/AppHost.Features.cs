@@ -36,7 +36,7 @@ internal sealed partial class AppHost
         _copilot?.Configure(CopilotOn(s), s.Intervals.CopilotSeconds);
         _battery?.Configure(BatteryOn(s), s.Intervals.BatterySeconds);
     }
-    private static string NoteThemeKey(EmberSettings s) => $"{s.Layout.Font}|{s.Layout.FontSize}|{ThemeStore.Serialize(s.Theme)}";
+    private static string NoteThemeKey(EmberSettings s) => $"{s.Layout.Font}|{s.Layout.FontSize}|{s.Notes.Opacity}|{ThemeStore.Serialize(s.Theme)}";
 
     private void StartFeatures()
     {

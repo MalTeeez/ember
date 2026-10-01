@@ -58,7 +58,7 @@ internal sealed class NoteWindow : Win32Window
     }
 
     private Rgb Background => Rgb.Parse(_cfg.Theme.Background.Color, Palette.Background);
-    private Rgb TitleBar => Rgb.Lerp(Background, _c.Text, 0.10);
+    private Rgb TitleBar => Background; // same colour as the note: only the icons show the bar
     private Rgb CodeBackground => Rgb.Lerp(Background, _c.Text, 0.12);
 
     public void Create(RECT r, bool minimized)
@@ -113,8 +113,8 @@ internal sealed class NoteWindow : Win32Window
     {
         _cfg = cfg;
         _c = ThemeColors.From(cfg.Theme);
-        // The note keeps a readable background: at least 75 % opaque.
-        int opacity = Math.Clamp(Math.Max(cfg.Theme.Background.Opacity + 35, 75), 0, 100);
+        // Notes have their own opacity (Settings → Notes), not the widget's background or text opacity.
+        int opacity = Math.Clamp(cfg.Notes.Opacity, 30, 100);
         W.SetLayeredWindowAttributes(Handle, 0, (byte)Math.Round(255 * opacity / 100.0), W.LWA_ALPHA);
         if (_bgBrush != IntPtr.Zero) W.DeleteObject(_bgBrush);
         _bgBrush = W.CreateSolidBrush(Background.ToColorRef());
@@ -169,21 +169,15 @@ internal sealed class NoteWindow : Win32Window
         Gdip.GdipCreateBitmapFromScan0(rc.Width, rc.Height, 0, Gdip.PixelFormat32bppPARGB, IntPtr.Zero, out var bmp);
         Gdip.GdipGetImageGraphicsContext(bmp, out var g);
         Gdip.GdipGraphicsClear(g, Background.ToArgb());
-        Gdip.GdipCreateSolidFill(TitleBar.ToArgb(), out var bar);
-        Gdip.GdipFillRectangle(g, bar, 0, 0, rc.Width, TitleHeight);
-        Gdip.GdipDeleteBrush(bar);
         Gdip.GdipSetTextRenderingHint(g, 5);
 
         Gdip.GdipCreateFontFamilyFromName("Segoe UI", IntPtr.Zero, out var fam);
         Gdip.GdipCreateFont(fam, 11.5f * _scale, Gdip.FontStyleRegular, Gdip.UnitPixel, out var font);
         Gdip.GdipCreateSolidFill(_c.Unit.ToArgb(), out var brush);
-        var titleRect = new RectF(8 * _scale, 0, rc.Width - 2 * ButtonWidth - 12 * _scale, TitleHeight);
         Gdip.GdipStringFormatGetGenericDefault(out var fmt);
         Gdip.GdipCloneStringFormat(fmt, out var lineFmt);
         Gdip.GdipSetStringFormatLineAlign(lineFmt, Gdip.StringAlignmentCenter);
         Gdip.GdipSetStringFormatFlags(lineFmt, Gdip.StringFormatFlagsNoWrap);
-        string title = Title.Length > 0 ? Title : "note";
-        Gdip.GdipDrawString(g, title, title.Length, font, ref titleRect, lineFmt, brush);
 
         // Buttons: minimize and close, icon font glyphs centred.
         IntPtr iconFam = IntPtr.Zero, iconFont = IntPtr.Zero;

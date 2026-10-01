@@ -313,5 +313,6 @@ public static class SettingsSchema
                 return true;
             },
         };
+        yield return Slider("Notes", "", "Note opacity %", 30, 100, s => s.Notes.Opacity, (s, v) => s.Notes.Opacity = (int)v);
     }
 }

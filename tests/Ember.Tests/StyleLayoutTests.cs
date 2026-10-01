@@ -460,3 +460,14 @@ public class DataGateTests
         Assert.DoesNotContain(gone, l => l.Text.Contains("claude"));
     }
 }
+
+public class NoteSettingsTests
+{
+    [Fact]
+    public void NoteOpacity_OwnSetting_Clamped()
+    {
+        var s = SettingsStore.Parse("""{"notes":{"opacity":5},"layout":{"opacity":20}}""");
+        Assert.Equal(30, s.Notes.Opacity);
+        Assert.Equal(100, new EmberSettings().Notes.Opacity);
+    }
+}
