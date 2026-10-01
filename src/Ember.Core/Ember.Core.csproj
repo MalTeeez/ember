@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Pure logic. No Windows APIs, no packages. Builds and tests on Linux. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Ember.Core</RootNamespace>
+  </PropertyGroup>
+</Project>
