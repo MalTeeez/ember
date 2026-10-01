@@ -95,6 +95,7 @@ internal sealed class ProcessPopup : Win32Window
     private int _hover = -1;
     private float _scale = 1;
     private int _headerH;
+    private bool _modal; // a message box is open: do not close on deactivation
 
     private ProcessPopup(int pid, ThemeColors c)
     {
@@ -185,7 +186,7 @@ internal sealed class ProcessPopup : Win32Window
         Button("Open location", () => ProcessActions.OpenLocation(pid));
         Button("Properties", () => ProcessActions.Properties(pid));
         Button("Copy", CopyDetails);
-        Button("End process", () => { ProcessActions.EndProcess(Handle, pid); Destroy(); }, true);
+        Button("End process", () => { _modal = true; ProcessActions.EndProcess(Handle, pid); _modal = false; Destroy(); }, true);
         Button("End tree", () => { ProcessActions.EndTree(pid); Destroy(); }, true);
         _closeRect = new RECT(w - S(40), S(12), w - S(12), S(40));
         return y + bh + S(16);
@@ -345,7 +346,7 @@ internal sealed class ProcessPopup : Win32Window
                 return IntPtr.Zero;
             }
             case W.WM_ACTIVATE:
-                if (((long)wParam & 0xFFFF) == 0) W.PostMessage(Handle, W.WM_CLOSE, IntPtr.Zero, IntPtr.Zero); // closes when it loses focus
+                if (((long)wParam & 0xFFFF) == 0 && !_modal) W.PostMessage(Handle, W.WM_CLOSE, IntPtr.Zero, IntPtr.Zero); // closes when it loses focus
                 break;
             case W.WM_KEYDOWN:
                 if ((int)wParam == 0x1B) Destroy(); // Esc

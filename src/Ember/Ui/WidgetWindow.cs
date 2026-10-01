@@ -98,6 +98,8 @@ internal sealed class WidgetWindow : Win32Window
         if (!IsAlive || hidden == Hidden) return;
         Hidden = hidden;
         Tooltip.HideShared();
+        StopAnim();
+        UpdateHoverTimer();
         W.ShowWindow(Handle, hidden ? W.SW_HIDE : W.SW_SHOWNOACTIVATE);
         if (!hidden) Invalidate();
     }
@@ -372,6 +374,7 @@ internal sealed class WidgetWindow : Win32Window
         switch (msg)
         {
             case W.WM_TIMER when (uint)wParam == HoverTimer:
+                if (Hidden) return IntPtr.Zero;
                 if (W.GetCursorPos(out var cp))
                 {
                     int hit = HitAtScreen(cp);

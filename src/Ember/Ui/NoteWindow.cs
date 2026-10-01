@@ -16,11 +16,11 @@ namespace Ember.Ui;
 internal sealed class NoteWindow : Win32Window
 {
     private const string ClassName = "Ember.Note";
-    private const uint SaveTimer = 1;
+    private const uint SaveTimer = 1, WM_SHOWMENU = W.WM_APP + 1;
     private const int CmdNew = 1, CmdMinimize = 2, CmdDelete = 3;
     private static bool _richEditLoaded;
 
-    private IntPtr _edit, _bgBrush;
+    private IntPtr _edit, _bgBrush, _textDoc;
     private bool _styling;
     private float _scale = 1;
     private EmberSettings _cfg;
@@ -79,6 +79,7 @@ internal sealed class NoteWindow : Win32Window
         W.SendMessage(_edit, W.EM_EXLIMITTEXT, IntPtr.Zero, (IntPtr)(1 << 20));
         W.SendMessage(_edit, W.WM_SETTEXT, IntPtr.Zero, Text);
         W.SendMessage(_edit, W.EM_SETEVENTMASK, IntPtr.Zero, (IntPtr)(W.ENM_CHANGE | W.ENM_MOUSEEVENTS));
+        _textDoc = RichEditOle.TextDocument(_edit);
         ApplySettings(_cfg);
         DoLayout();
         Minimized = minimized;
@@ -281,6 +282,7 @@ internal sealed class NoteWindow : Win32Window
     {
         if (_edit == IntPtr.Zero || _styling) return;
         _styling = true;
+        RichEditOle.SuspendUndo(_textDoc); // styling must not be in Ctrl+Z
         try
         {
             string text = ReadText();
@@ -321,7 +323,11 @@ internal sealed class NoteWindow : Win32Window
             W.InvalidateRect(_edit, IntPtr.Zero, true);
             W.SendMessage(_edit, W.EM_SETEVENTMASK, IntPtr.Zero, mask);
         }
-        finally { _styling = false; }
+        finally
+        {
+            RichEditOle.ResumeUndo(_textDoc);
+            _styling = false;
+        }
         W.InvalidateRect(Handle, IntPtr.Zero, false); // title may have changed
     }
 
@@ -357,8 +363,8 @@ internal sealed class NoteWindow : Win32Window
         }
         if (msg == W.WM_RBUTTONUP)
         {
-            W.GetCursorPos(out var sp);
-            ShowMenu(sp);
+            // Show the menu after RichEdit has returned (the menu can delete this window).
+            W.PostMessage(Handle, WM_SHOWMENU, IntPtr.Zero, IntPtr.Zero);
             return true;
         }
         return false;
@@ -425,6 +431,7 @@ internal sealed class NoteWindow : Win32Window
                 return IntPtr.Zero;
             }
             case W.WM_NCRBUTTONUP:
+            case WM_SHOWMENU:
                 if (W.GetCursorPos(out var np)) ShowMenu(np);
                 return IntPtr.Zero;
             case W.WM_SIZE:
@@ -473,6 +480,8 @@ internal sealed class NoteWindow : Win32Window
             case W.WM_DESTROY:
                 W.KillTimer(Handle, (UIntPtr)SaveTimer);
                 if (_bgBrush != IntPtr.Zero) W.DeleteObject(_bgBrush);
+                RichEditOle.Release(_textDoc);
+                _textDoc = IntPtr.Zero;
                 return IntPtr.Zero;
         }
         return base.OnMessage(msg, wParam, lParam);
