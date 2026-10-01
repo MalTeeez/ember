@@ -57,7 +57,8 @@ internal sealed partial class Sampler
             return null;
         }
         SysInfo.Commit(out ulong commit, out ulong limit); // zero on failure: commit item hides
-        bool pageFile = (cfg.IsOn("mem.commit") || cfg.PreviewAll) && SysInfo.PageFiles(out ulong pfUsed, out ulong pfTotal);
+        ulong pfUsed = 0, pfTotal = 0;
+        bool pageFile = (cfg.IsOn("mem.commit") || cfg.PreviewAll) && SysInfo.PageFiles(out pfUsed, out pfTotal);
         return new MemData
         {
             AvailBytes = avail,
