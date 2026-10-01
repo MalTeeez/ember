@@ -47,19 +47,28 @@ jobs:
             uninstall.ps1
           if-no-files-found: warn
 
-      - name: Release (tags only)
-        if: github.ref_type == 'tag'
+      - name: Release
+        # A pushed tag v*, or a push to main with a new <Version> in Ember.csproj (tag v<major>.<minor>[.<patch>]),
+        # creates the tag (if needed) and a GitHub release with the exe and a zip. Each tag gets one release.
+        if: github.event_name == 'push' && (github.ref_type == 'tag' || github.ref_name == 'main')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = '${{ github.ref_name }}'
+          if ('${{ github.ref_type }}' -eq 'tag') { $tag = '${{ github.ref_name }}' }
+          else {
+            [xml]$proj = Get-Content src/Ember/Ember.csproj
+            $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+            $parts = $v.Split('.')
+            $tag = 'v' + ($(if ($parts.Count -ge 3 -and $parts[2] -ne '0') { $v } else { "$($parts[0]).$($parts[1])" }))
+          }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host "Release $tag exists: nothing to do."; exit 0 }
           $zip = "Ember-$tag-win-x64.zip"
           Compress-Archive -Path publish/Ember.exe, install.ps1, uninstall.ps1 -DestinationPath $zip
           Copy-Item publish/Ember.exe "Ember-$tag-win-x64.exe"
           $notes = "docs/releases/$tag.md"
-          if (Test-Path $notes) {
-            gh release create $tag $zip "Ember-$tag-win-x64.exe" --title "Ember $tag" --notes-file $notes
-          } else {
-            gh release create $tag $zip "Ember-$tag-win-x64.exe" --title "Ember $tag" --generate-notes
-          }
+          $args = @($tag, $zip, "Ember-$tag-win-x64.exe", '--title', "Ember $tag", '--target', '${{ github.sha }}')
+          if (Test-Path $notes) { $args += @('--notes-file', $notes) } else { $args += '--generate-notes' }
+          gh release create @args
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
