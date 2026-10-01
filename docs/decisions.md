@@ -27,3 +27,16 @@ Rule: when the spec is silent, choose the simplest option.
 | C6 | Projection colour: severity of (time to reset ÷ time to limit), warning 1, critical 2. The spec example (limit in 1 h, reset in 4 h → ratio 4) is red. | The spec gives no numbers for this gradient. |
 | C7 | The 5h rate uses the samples from 30 min ago to now. A new window (reset time moves by more than 5 min) or a drop in usage clears the history. | Spec: "last 30 min of the widget's own samples". |
 | C8 | Usage bars are 20 cells wide and monochrome. The "lasts" / "limit 1h00" / "—" text is right-aligned on the second line. | Matches the spec example (42 % = 8⅜ cells). The spec gives no threshold for used %. |
+
+## GPU
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| G1 | GPU list from DXGI (`EnumAdapters1`), without software adapters and the Microsoft Basic Render Driver. Read at start and every 10 min. | Gives name, LUID (to match PDH instance names) and VRAM total. |
+| G2 | Integrated GPU = less than 512 MiB dedicated video memory. | DXGI has no "integrated" flag. iGPUs report 0–512 MiB dedicated memory. |
+| G3 | Adapter load = for each engine, the sum over processes; then the busiest engine. Top process = highest load of one process on one engine of that adapter. | Task Manager method (spec). |
+| G4 | LHM GPU temperature: sensor "GPU Core" (else the first temperature sensor), matched to the DXGI adapter by name. If there is exactly one LHM GPU temperature and one discrete adapter, they are matched. | LHM does not expose the LUID. |
+| G5 | Short GPU label: `rtx`, `gtx`, `qdr`, `rx`, `arc`, `igp`, else `gpu`; a number is added when two GPUs have the same label. | Fits the 4-column label (spec example `rtx`). |
+| G6 | The GPU line shows when load, temperature, VRAM or top process is visible; load/temperature fields are blank when their item is not visible. VRAM is a separate line `vram 7.8/8.0 GB 97%`. | One block for each GPU (spec). |
+| G7 | GPU load and CPU load have no colour gradient (monochrome graphs). | The spec gives them a visibility threshold only, not warning/critical values. |
+| G8 | PDH "GPU Engine" and "GPU Adapter Memory" counters are added only while a GPU item that needs them is on. | The GPU Engine wildcard counter has many instances and costs CPU. |
