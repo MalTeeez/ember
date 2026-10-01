@@ -53,7 +53,7 @@ public static class DemoData
             CommitLimitBytes = 40UL << 30,
             PagesInPerSec = Wave(10, 200, 4000),
         };
-        s.Disks ??= new List<DiskData> { new("d0", "C:", Wave(8, 60, 100), Wave(8, 0.5, 4)) };
+        s.Disks ??= new List<DiskData> { new("d0", "C:", Wave(8, 60, 100), Wave(8, 0.5, 4), Wave(8, 0.4, 3), Wave(5, 0, 1)) };
         s.Volumes ??= new List<VolumeData> { new("C:\\", 14.0 * (1 << 30), 500.0 * (1 << 30)) };
 
         s.TopCpu ??= top;

@@ -51,7 +51,8 @@ public sealed class MemData
     public double? PagesInPerSec { get; set; }
 }
 
-public sealed record DiskData(string Label, string Volumes, double ActivePercent, double Queue);
+/// <summary>Physical disk: busy %, average queue length (all, reads, writes; averages over the sample time).</summary>
+public sealed record DiskData(string Label, string Volumes, double ActivePercent, double Queue, double ReadQueue = 0, double WriteQueue = 0);
 
 public sealed record VolumeData(string Root, double FreeBytes, double TotalBytes);
 

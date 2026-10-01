@@ -49,6 +49,21 @@ public static class Format
     /// <summary>Bytes with "B": "3.1GB", "512MB", " 35GB" (5 characters, base 1024).</summary>
     public static string BytesB(double bytes) => (Bytes4(bytes).Trim() + "B").PadLeft(5);
 
+    /// <summary>
+    /// Queued I/O requests in words: "3 reads, 1 write", "2 reads", "<1 write", "none".
+    /// The values are averages over the sample time, so they are rounded; below 0.5 but above 0 is "<1".
+    /// Without a read/write split (both 0 but a total), the total is shown as "3 requests".
+    /// </summary>
+    public static string QueueText(double reads, double writes, double total)
+    {
+        static string Count(double v) => v >= 0.5 ? Math.Round(v).ToString("0", Inv) : "<1";
+        static string Part(double v, string one, string many) => Count(v) + " " + (v >= 0.5 && Math.Round(v) == 1 || v < 0.5 ? one : many);
+        bool r = reads > 0.05, w = writes > 0.05;
+        if (!r && !w) return total > 0.05 ? Part(total, "request", "requests") : "none";
+        if (r && w) return Part(reads, "read", "reads") + ", " + Part(writes, "write", "writes");
+        return r ? Part(reads, "read", "reads") : Part(writes, "write", "writes");
+    }
+
     /// <summary>Clock with its unit in 6 characters: "4.8GHz", "800MHz".</summary>
     public static string Hz6(double mhz) => (Clock4(mhz).Trim() + "Hz").PadLeft(6);
 

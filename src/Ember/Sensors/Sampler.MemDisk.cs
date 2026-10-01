@@ -10,7 +10,7 @@ namespace Ember.Sensors;
 // Disk: PDH PhysicalDisk(*) % Idle Time and Avg. Disk Queue Length, GetDiskFreeSpaceEx.
 internal sealed partial class Sampler
 {
-    private PdhQuery.PdhCounter? _pagesIn, _diskIdle, _diskQueue;
+    private PdhQuery.PdhCounter? _pagesIn, _diskIdle, _diskQueue, _diskReadQueue, _diskWriteQueue;
 
     private void UpdateMemDiskCounters(EmberSettings cfg)
     {
@@ -23,11 +23,16 @@ internal sealed partial class Sampler
         {
             _diskIdle = _pdh.Add(@"\PhysicalDisk(*)\% Idle Time");
             _diskQueue = _pdh.Add(@"\PhysicalDisk(*)\Avg. Disk Queue Length");
+            _diskReadQueue = _pdh.Add(@"\PhysicalDisk(*)\Avg. Disk Read Queue Length");
+            _diskWriteQueue = _pdh.Add(@"\PhysicalDisk(*)\Avg. Disk Write Queue Length");
         }
         else if (!disk && _diskIdle != null)
         {
             _pdh.Remove(_diskIdle);
             _pdh.Remove(_diskQueue);
+            if (_diskReadQueue != null) _pdh.Remove(_diskReadQueue);
+            if (_diskWriteQueue != null) _pdh.Remove(_diskWriteQueue);
+            _diskReadQueue = _diskWriteQueue = null;
             _diskIdle = _diskQueue = null;
         }
     }
@@ -55,12 +60,14 @@ internal sealed partial class Sampler
     {
         if (_diskIdle?.Array() is not { } idle) return null;
         var queue = _diskQueue?.Array()?.ToDictionary(x => x.Instance, x => x.Value) ?? new();
+        var reads = _diskReadQueue?.Array()?.ToDictionary(x => x.Instance, x => x.Value) ?? new();
+        var writes = _diskWriteQueue?.Array()?.ToDictionary(x => x.Instance, x => x.Value) ?? new();
         var list = new List<DiskData>();
         foreach (var (inst, idleValue) in idle)
         {
             if (DiskNames.Parse(inst) is not { } n) continue;
             double active = Math.Clamp(100 - idleValue, 0, 100);
-            list.Add(new DiskData(n.Label, n.Volumes, active, queue.GetValueOrDefault(inst)));
+            list.Add(new DiskData(n.Label, n.Volumes, active, queue.GetValueOrDefault(inst), reads.GetValueOrDefault(inst), writes.GetValueOrDefault(inst)));
         }
         return list;
     }

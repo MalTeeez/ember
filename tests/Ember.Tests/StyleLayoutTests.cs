@@ -559,10 +559,12 @@ public class DiskMemoryLineTests
         var c = new StatusComposer();
         List<Ember.Core.Render.Line> lines = new();
         for (int i = 0; i <= 6; i++)
-            lines = c.Compose(new Snapshot { Time = T0.AddSeconds(i), Disks = new() { new("d1", "C:", 100, 3) } }, cfg);
+            lines = c.Compose(new Snapshot { Time = T0.AddSeconds(i), Disks = new() { new("d1", "C:", 100, 3, 2.6, 0.4) } }, cfg);
         var l = lines.Single(x => x.Text.StartsWith("C:"));
         Assert.StartsWith("C:  busy ", l.Text);
-        Assert.EndsWith(" 100%  3.0 queued", l.Text); // queued = I/O requests waiting
+        Assert.EndsWith(" 100%", l.Text);
+        int k = lines.IndexOf(l);
+        Assert.Equal("  └ queued: 3 reads, <1 write", lines[k + 1].Text.TrimEnd());
         Assert.Contains(l.Text[9], "⠀⣿".ToCharArray().Concat(Enumerable.Range(0x2800, 256).Select(x => (char)x)));
         Assert.Equal(Layout.Width, l.Length);
     }
@@ -577,8 +579,8 @@ public class DiskMemoryLineTests
         List<Ember.Core.Render.Line> lines = new();
         for (int i = 0; i <= 6; i++)
             lines = c.Compose(new Snapshot { Time = T0.AddSeconds(i), Mem = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = G, CommitLimitBytes = 32 * G, PagesInPerSec = 6000 } }, cfg);
-        var l = lines.Single(x => x.Text.Contains("disk paging"));
-        Assert.StartsWith("disk paging ", l.Text);
+        var l = lines.Single(x => x.Text.Contains("hard page faults"));
+        Assert.StartsWith("hard page faults ", l.Text);
         Assert.EndsWith("6.0k/s", l.Text);
     }
 }
@@ -602,7 +604,7 @@ public class FaultLineTests
                 FaultProcs = procs, FaultsTotal = 1000,
             }, cfg);
         Assert.True(c.Needs.Faults);
-        int k = lines.FindIndex(l => l.Text.StartsWith("disk paging"));
+        int k = lines.FindIndex(l => l.Text.StartsWith("hard page faults"));
         var first = lines[k + 1];
         Assert.StartsWith(" └ chrome.exe", first.Text);
         Assert.EndsWith(" 4.0GB  900/s", first.Text);
@@ -613,4 +615,16 @@ public class FaultLineTests
         Assert.Contains(first.Runs, r => r.Text.Contains("4.0GB") && r.Color == top);
         Assert.StartsWith(" └ code.exe", lines[k + 2].Text);
     }
+}
+
+public class QueueTextTests
+{
+    [Theory]
+    [InlineData(2.6, 0.4, 3.0, "3 reads, <1 write")]
+    [InlineData(1.0, 0, 1.0, "1 read")]
+    [InlineData(0, 4.4, 4.4, "4 writes")]
+    [InlineData(0, 0, 0, "none")]
+    [InlineData(0, 0, 2.2, "2 requests")]
+    public void Words(double r, double w, double total, string expected)
+        => Assert.Equal(expected, Format.QueueText(r, w, total));
 }

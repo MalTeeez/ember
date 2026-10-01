@@ -597,7 +597,7 @@ public sealed class StatusComposer
 
         if (On("mem.pagein") && m.PagesInPerSec is { } pf)
         {
-            // "disk paging ⣀⣠⣴⣶⣿⣿⣿⣿⣿⣿  983/s" — pages read from disk (hard page faults) per second,
+            // "hard page faults ⣀⣠⣴⣶⣿⣿  983/s" — pages read from disk (hard page faults) per second,
             // then the processes that cause them.
             var h = Hist("mem.pf");
             h.Add(Math.Max(0, pf));
@@ -608,7 +608,7 @@ public sealed class StatusComposer
             {
                 any = true;
                 var b = new LineBuilder();
-                b.Add("disk paging", _c.Memory);
+                b.Add("hard page faults", _c.Memory);
                 string value = Format.Count4(pf) + "/s";
                 Graph(b, h.Values, Math.Max(h.Max, t.PageFaults.Crit), _c.Memory, b.Column + 1, Layout.Width - value.Length - 1 - b.Column - 1);
                 b.Add(" ", _c.Dim);
@@ -696,7 +696,8 @@ public sealed class StatusComposer
 
         if (On("disk.busy") && s.Disks != null)
         {
-            // "C:  busy ⣀⣠⣴⣶⣿  98% 3.0 queued" — drive letter(s), busy time with graph, I/O requests waiting.
+            // "C:  busy ⣀⣠⣴⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿  98%"
+            // "  └ queued: 3 reads, 1 write"      — drive letter(s), busy time with graph; I/O requests waiting.
             var names = s.Disks.Select(d => Util.DiskNames.Display(d.Label, d.Volumes)).ToList();
             int nameW = Math.Clamp(names.Max(n => n.Length) + 1, 4, 8);
             var lines = new List<Line>();
@@ -714,14 +715,16 @@ public sealed class StatusComposer
                 var b = new LineBuilder();
                 b.Add(names[i], _c.Disk).PadTo(nameW);
                 b.Add("busy", _c.Unit);
-                const int right = 1 + 4 + 1 + 4 + 7; // load, queue value, " queued"
-                Graph(b, h.Values, 100, _c.Disk, b.Column + 1, Layout.Width - right - b.Column - 1);
+                Graph(b, h.Values, 100, _c.Disk, b.Column + 1, Layout.Width - b.Column - 1 - 1 - Layout.FieldWidth);
                 b.Add(" ", _c.Dim);
                 Val(b, Format.Pct4(d.ActivePercent), _c.Severity(d.ActivePercent, t.DiskActive.Warn, t.DiskActive.Crit));
-                b.Add(" ", _c.Dim);
-                Val(b, Format.Num4(d.Queue), _c.Severity(d.Queue, t.DiskQueue.Warn, t.DiskQueue.Crit));
-                b.Add(" queued", _c.Unit);
                 lines.Add(b.Build());
+
+                var q = new LineBuilder();
+                var qc = _c.Severity(d.Queue, t.DiskQueue.Warn, t.DiskQueue.Crit);
+                q.Add("  └ ", _c.Dim).Add("queued: ", _c.Unit);
+                Val(q, Format.QueueText(d.ReadQueue, d.WriteQueue, d.Queue), qc);
+                lines.Add(q.Build());
             }
             items["disk.busy"] = lines;
         }
