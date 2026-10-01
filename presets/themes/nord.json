@@ -32,6 +32,7 @@
   "HeaderStyle": "plain",
   "HeaderAlign": "left",
   "HeaderIndent": 0,
+  "HeaderIcons": false,
   "HeaderUpper": false,
   "HeaderBold": true,
   "BoldValues": true,
@@ -46,5 +47,12 @@
     "Padding": 10,
     "GradientAngle": 90,
     "TextShadow": false
-  }
+  },
+  "RowStripes": false,
+  "HeaderBand": false,
+  "GraphTrack": false,
+  "BarTrack": false,
+  "ValueChips": false,
+  "ProcessBand": false,
+  "BandOpacity": 100
 }

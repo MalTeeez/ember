@@ -158,8 +158,8 @@ public sealed class EmberSettings
         Thresholds ??= new(); Intervals ??= new(); Network ??= new(); Layout ??= new(); Notes ??= new();
         Network.ExcludedAdapters ??= new();
         Intervals.SensorSeconds = Math.Clamp(Intervals.SensorSeconds, 0.25, 60);
-        Intervals.ClaudeSeconds = Math.Clamp(Intervals.ClaudeSeconds, 15, 3600);
-        Intervals.CodexSeconds = Math.Clamp(Intervals.CodexSeconds, 15, 3600);
+        Intervals.ClaudeSeconds = Math.Clamp(Intervals.ClaudeSeconds, 60, 3600);
+        Intervals.CodexSeconds = Math.Clamp(Intervals.CodexSeconds, 60, 3600);
         Intervals.CopilotSeconds = Math.Clamp(Intervals.CopilotSeconds, 60, 3600);
         Intervals.BatterySeconds = Math.Clamp(Intervals.BatterySeconds, 10, 3600);
         Intervals.ShowDelaySeconds = Math.Clamp(Intervals.ShowDelaySeconds, 0, 600);

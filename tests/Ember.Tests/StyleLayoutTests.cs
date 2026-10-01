@@ -323,10 +323,12 @@ public class CoreGridComposeTests
         var cores = new double[16];
         for (int i = 0; i < 5; i++) cores[i] = 95;
         var lines = Run(cores);
-        var grid = lines.Where(l => l.Text.StartsWith("c") && !l.Text.StartsWith("cpu")).ToList();
+        var grid = lines.Where(l => l.Text.StartsWith(" c")).ToList();
         Assert.Equal(3, grid.Count);
-        Assert.StartsWith("c0 ", grid[0].Text);
-        Assert.Equal("c3 ", grid[0].Text.Substring(16, 3));
+        // 2 columns of 15 with 1 gap, aligned right (indent 1).
+        Assert.StartsWith(" c0 ", grid[0].Text);
+        Assert.Equal("c3 ", grid[0].Text.Substring(17, 3));
+        Assert.Contains(" 95%", grid[0].Text);
         Assert.All(grid, l => Assert.Equal(Layout.Width, l.Length));
     }
 
@@ -336,9 +338,11 @@ public class CoreGridComposeTests
         var cores = new double[16];
         for (int i = 0; i < 12; i++) cores[i] = 90;
         var lines = Run(cores);
-        var grid = lines.Where(l => l.Text.StartsWith("c") && !l.Text.StartsWith("cpu")).ToList();
+        var grid = lines.Where(l => l.Text.StartsWith("   c")).ToList();
         Assert.Equal(3, grid.Count);
-        Assert.Equal("c3 ", grid[0].Text.Substring(11, 3));
+        // 3 columns of 9 with 1 gap, indent 3.
+        Assert.Equal("c3 ", grid[0].Text.Substring(13, 3));
+        Assert.Contains(" 90%", grid[0].Text);
         Assert.Contains(lines, l => l.Text.Contains("3 hot cores hidden, at ") && l.Text.Contains("%"));
     }
 
@@ -349,7 +353,7 @@ public class CoreGridComposeTests
         var temps = Enumerable.Repeat(55.0, 8).ToArray();
         temps[5] = 80;
         var lines = Run(cores, temps);
-        Assert.Contains(lines, l => l.Text.StartsWith("c5 "));
+        Assert.Contains(lines, l => l.Text.TrimStart().StartsWith("c5 "));
     }
 
     [Fact]
@@ -469,5 +473,67 @@ public class NoteSettingsTests
         var s = SettingsStore.Parse("""{"notes":{"opacity":5},"layout":{"opacity":20}}""");
         Assert.Equal(30, s.Notes.Opacity);
         Assert.Equal(100, new EmberSettings().Notes.Opacity);
+    }
+}
+
+public class RowBackgroundTests
+{
+    private static readonly DateTime T0 = new(2026, 10, 1, 12, 0, 0);
+
+    [Fact]
+    public void Options_AddBackgrounds()
+    {
+        var cfg = new EmberSettings { PreviewAll = true };
+        cfg.Theme.HeaderBand = cfg.Theme.GraphTrack = cfg.Theme.BarTrack = cfg.Theme.RowStripes = cfg.Theme.ProcessBand = true;
+        var lines = new StatusComposer().Compose(new Snapshot { Time = T0 }, cfg);
+        Assert.Contains(lines, l => l.Text.Contains("net") && l.Back.Visible);           // header band
+        Assert.Contains(lines, l => l.Runs.Any(r => r.Text.Any(ch => ch is >= '⠀' and <= '⣿') && r.Back.Visible)); // graph track
+        Assert.Contains(lines, l => l.Pid > 0 && l.Back.Visible);                         // process band
+        // Off by default.
+        var plain = new StatusComposer().Compose(new Snapshot { Time = T0 }, new EmberSettings { PreviewAll = true });
+        Assert.DoesNotContain(plain, l => l.Back.Visible || l.Runs.Any(r => r.Back.Visible));
+    }
+
+    [Fact]
+    public void HeaderIcons_BeforeTitle()
+    {
+        var t = new Theme { HeaderIcons = true };
+        var h = Layout.Header("gpu", ThemeColors.From(t));
+        Assert.Contains(h.Runs, r => r.Style == RunStyle.Icon && r.Text[0] == Icons.Monitor);
+        Assert.Equal(Layout.Width, h.Length);
+        Assert.Contains("  gpu ", h.Text);
+    }
+
+    [Fact]
+    public void BuiltInThemes_UniqueNames_RoundTrip()
+    {
+        var names = ThemeStore.BuiltIn.Select(t => t.Name).ToList();
+        Assert.True(names.Count >= 20);
+        Assert.Equal(names.Count, names.Distinct().Count());
+        foreach (var t in ThemeStore.BuiltIn)
+        {
+            Assert.Contains(t.HeaderStyle, ThemeStore.HeaderStyles);
+            Assert.Contains(t.Background.Kind, ThemeStore.BackgroundKinds);
+            Assert.Contains(t.BarStyle, ThemeStore.BarStyles);
+            Assert.Equal(ThemeStore.Serialize(t), ThemeStore.Serialize(ThemeStore.Parse(ThemeStore.Serialize(t))!));
+        }
+    }
+
+    [Fact]
+    public void CcdTemps_SplitOverCores()
+    {
+        // 4 physical cores, 2 threads each, 2 CCDs.
+        var phys = new[] { 0, 0, 1, 1, 2, 2, 3, 3 };
+        var t = CoreTempMap.ByCcd(phys, new[] { 60.0, 70.0 });
+        Assert.Equal(new[] { 60.0, 60, 60, 60, 70, 70, 70, 70 }, t);
+        Assert.True(double.IsNaN(CoreTempMap.ByCcd(new[] { -1 }, new[] { 60.0 })[0]));
+    }
+
+    [Fact]
+    public void Formats_HzAndPackets()
+    {
+        Assert.Equal("4.8GHz", Format.Hz6(4800));
+        Assert.Equal("800MHz", Format.Hz6(800));
+        Assert.Equal("457k pkt", Format.Pkt(457_000));
     }
 }

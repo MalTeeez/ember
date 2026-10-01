@@ -15,6 +15,9 @@ internal sealed partial class TempSource : IDisposable
     [System.Text.RegularExpressions.GeneratedRegex(@"^(CPU |P-|E-)?Core #\d+$")]
     private static partial System.Text.RegularExpressions.Regex CoreName();
 
+    [System.Text.RegularExpressions.GeneratedRegex(@"^CCD ?#?(\d+)")]
+    private static partial System.Text.RegularExpressions.Regex CcdName();
+
     public readonly record struct GpuTemp(string Name, double Celsius);
 
 #if LHM
@@ -27,6 +30,8 @@ internal sealed partial class TempSource : IDisposable
     /// <summary>Per physical core temperatures in LHM order: ("CPU Core #1", 55), or ("P-Core #1", …), ("E-Core #1", …).</summary>
     public List<(string Name, double Celsius)> CoreTemps { get; } = new();
     public List<GpuTemp> Gpus { get; } = new();
+    /// <summary>AMD: temperature per CCD (core die), in CCD order ("CCD1 (Tdie)", "CCD2 (Tdie)").</summary>
+    public List<double> CcdTemps { get; } = new();
 
     /// <summary>Reads the temperatures. Only the enabled hardware is updated.</summary>
     public void Update(bool cpu, bool gpu)
@@ -34,6 +39,7 @@ internal sealed partial class TempSource : IDisposable
         CpuPackage = null;
         Gpus.Clear();
         CoreTemps.Clear();
+        CcdTemps.Clear();
 #if LHM
         if (!cpu && !gpu) return;
         if (_failed) return;
@@ -62,9 +68,15 @@ internal sealed partial class TempSource : IDisposable
                 {
                     var t = PackageTemp(hw);
                     if (t != null) CpuPackage = CpuPackage == null ? t : Math.Max(CpuPackage.Value, t.Value);
+                    var ccds = new SortedDictionary<int, double>();
                     foreach (var sensor in hw.Sensors)
-                        if (sensor.SensorType == SensorType.Temperature && sensor.Value is { } v && CoreName().IsMatch(sensor.Name))
-                            CoreTemps.Add((sensor.Name, v));
+                    {
+                        if (sensor.SensorType != SensorType.Temperature || sensor.Value is not { } v) continue;
+                        if (CoreName().IsMatch(sensor.Name)) CoreTemps.Add((sensor.Name, v));
+                        else if (CcdName().Match(sensor.Name) is { Success: true } m && int.TryParse(m.Groups[1].Value, out int n))
+                            ccds[n] = Math.Max(ccds.GetValueOrDefault(n), v);
+                    }
+                    CcdTemps.AddRange(ccds.Values);
                 }
                 else
                 {

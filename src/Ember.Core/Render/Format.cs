@@ -46,6 +46,12 @@ public static class Format
     /// <summary>Clock from MHz: "4.8G", "800M".</summary>
     public static string Clock4(double mhz) => Scaled4(mhz, 1000, "MG");
 
+    /// <summary>Clock with its unit in 6 characters: "4.8GHz", "800MHz".</summary>
+    public static string Hz6(double mhz) => (Clock4(mhz).Trim() + "Hz").PadLeft(6);
+
+    /// <summary>Packets per second: "457k pkt", " 980 pkt" (4-character value, space, unit).</summary>
+    public static string Pkt(double perSecond) => Count4(perSecond) + " pkt";
+
     /// <summary>Counts: " 980", "1.5k", " 12k".</summary>
     public static string Count4(double n)
     {

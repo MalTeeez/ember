@@ -96,22 +96,39 @@ public sealed record UsageData(UsageWindow? FiveHour, UsageWindow? SevenDay, IRe
 /// <summary>Poll interval with doubling on HTTP 429.</summary>
 public sealed class PollBackoff
 {
-    public TimeSpan Base { get; set; }
-    public TimeSpan Max { get; set; } = TimeSpan.FromHours(1);
+    /// <summary>Shortest interval (also the shortest retry): 1 min.</summary>
+    public static readonly TimeSpan MinInterval = TimeSpan.FromMinutes(1);
+    /// <summary>Each HTTP 429 adds this to the interval.</summary>
+    public static readonly TimeSpan Step = TimeSpan.FromSeconds(30);
+
+    private TimeSpan _base;
+    public TimeSpan Base
+    {
+        get => _base;
+        set
+        {
+            _base = value < MinInterval ? MinInterval : value;
+            if (Current < _base) Current = _base;
+        }
+    }
+    /// <summary>Longest interval after repeated 429 answers: 5 min (or the base, if that is longer).</summary>
+    public TimeSpan Max { get; set; } = TimeSpan.FromMinutes(5);
     public TimeSpan Current { get; private set; }
 
     public PollBackoff(TimeSpan baseInterval)
     {
         Base = baseInterval;
-        Current = baseInterval;
+        Current = Base;
     }
 
     public void OnSuccess() => Current = Base;
 
+    /// <summary>HTTP 429: 30 s longer each time, up to <see cref="Max"/>.</summary>
     public void OnRateLimited()
     {
-        var next = TimeSpan.FromTicks(Math.Min(Current.Ticks * 2, Max.Ticks));
-        Current = next < Base ? Base : next;
+        var max = Max > Base ? Max : Base;
+        var next = Current + Step;
+        Current = next > max ? max : next;
     }
 
     /// <summary>Other failures keep the current interval.</summary>

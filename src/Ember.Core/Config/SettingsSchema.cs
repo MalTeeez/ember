@@ -189,6 +189,14 @@ public static class SettingsSchema
         yield return Choice(A, "Style", "Section headers", ThemeStore.HeaderStyles, s => s.Theme.HeaderStyle, (s, t) => s.Theme.HeaderStyle = t);
         yield return Choice(A, "Style", "Header alignment", ThemeStore.HeaderAligns, s => s.Theme.HeaderAlign, (s, t) => s.Theme.HeaderAlign = t);
         yield return Slider(A, "Style", "Header indent (characters)", 0, 12, s => s.Theme.HeaderIndent, (s, v) => s.Theme.HeaderIndent = (int)v);
+        yield return Bool(A, "Row backgrounds", "Stripes on every second line", s => s.Theme.RowStripes, (s, v) => s.Theme.RowStripes = v);
+        yield return Bool(A, "Row backgrounds", "Band behind headers", s => s.Theme.HeaderBand, (s, v) => s.Theme.HeaderBand = v);
+        yield return Bool(A, "Row backgrounds", "Band behind process lines", s => s.Theme.ProcessBand, (s, v) => s.Theme.ProcessBand = v);
+        yield return Bool(A, "Row backgrounds", "Track behind graphs", s => s.Theme.GraphTrack, (s, v) => s.Theme.GraphTrack = v);
+        yield return Bool(A, "Row backgrounds", "Track behind bars", s => s.Theme.BarTrack, (s, v) => s.Theme.BarTrack = v);
+        yield return Bool(A, "Row backgrounds", "Chips behind warning values", s => s.Theme.ValueChips, (s, v) => s.Theme.ValueChips = v);
+        yield return Slider(A, "Row backgrounds", "Strength %", 0, 300, s => s.Theme.BandOpacity, (s, v) => s.Theme.BandOpacity = (int)v);
+        yield return Bool(A, "Style", "Icons in headers", s => s.Theme.HeaderIcons, (s, v) => s.Theme.HeaderIcons = v);
         yield return Bool(A, "Style", "Upper-case headers", s => s.Theme.HeaderUpper, (s, v) => s.Theme.HeaderUpper = v);
         yield return Bool(A, "Style", "Bold headers", s => s.Theme.HeaderBold, (s, v) => s.Theme.HeaderBold = v);
         yield return Bool(A, "Style", "Bold values", s => s.Theme.BoldValues, (s, v) => s.Theme.BoldValues = v);
@@ -266,8 +274,8 @@ public static class SettingsSchema
         // ── Intervals ──
         const string V = "Intervals";
         yield return Number(V, "", "Sensors (s)", 0.25, 60, s => s.Intervals.SensorSeconds, (s, v) => s.Intervals.SensorSeconds = v);
-        yield return Number(V, "", "Claude usage (s)", 15, 3600, s => s.Intervals.ClaudeSeconds, (s, v) => s.Intervals.ClaudeSeconds = v);
-        yield return Number(V, "", "Codex usage (s)", 15, 3600, s => s.Intervals.CodexSeconds, (s, v) => s.Intervals.CodexSeconds = v);
+        yield return Number(V, "", "Claude usage (s)", 60, 3600, s => s.Intervals.ClaudeSeconds, (s, v) => s.Intervals.ClaudeSeconds = v);
+        yield return Number(V, "", "Codex usage (s)", 60, 3600, s => s.Intervals.CodexSeconds, (s, v) => s.Intervals.CodexSeconds = v);
         yield return Number(V, "", "Copilot usage (s)", 60, 3600, s => s.Intervals.CopilotSeconds, (s, v) => s.Intervals.CopilotSeconds = v);
         yield return Number(V, "", "Device batteries (s)", 10, 3600, s => s.Intervals.BatterySeconds, (s, v) => s.Intervals.BatterySeconds = v);
         yield return Number(V, "", "Show delay (s)", 0, 600, s => s.Intervals.ShowDelaySeconds, (s, v) => s.Intervals.ShowDelaySeconds = v);

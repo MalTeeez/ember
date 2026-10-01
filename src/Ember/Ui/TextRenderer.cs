@@ -24,6 +24,7 @@ internal sealed class TextRenderer : IDisposable
     private string _key = "";
 
     public static IntPtr GdipToken;
+    private static readonly HashSet<string> LoggedFonts = new();
 
     public static void Startup()
     {
@@ -59,7 +60,7 @@ internal sealed class TextRenderer : IDisposable
             Gdip.GdipCreateFontFamilyFromName("Segoe MDL2 Assets", IntPtr.Zero, out _iconFamily) != 0)
             _iconFamily = IntPtr.Zero;
         if (_iconFamily != IntPtr.Zero)
-            Gdip.GdipCreateFont(_iconFamily, px * 0.9f, Gdip.FontStyleRegular, Gdip.UnitPixel, out _iconFont);
+            Gdip.GdipCreateFont(_iconFamily, px * 0.78f, Gdip.FontStyleRegular, Gdip.UnitPixel, out _iconFont);
 
         Gdip.GdipStringFormatGetGenericTypographic(out var generic);
         Gdip.GdipCloneStringFormat(generic, out _format);
@@ -72,7 +73,9 @@ internal sealed class TextRenderer : IDisposable
 
         FindMissingGlyphs(used, (int)Math.Round(px));
         Measure();
-        Log.Write($"font {used} {sizePt}pt dpi {dpi}: cell {CellWidth:0.00}x{LineHeight:0.00}, icons {(_iconFont != IntPtr.Zero)}, missing '{new string(_missing.ToArray())}'");
+        // Log only problems (missing glyphs or icon font), once per font setup.
+        if ((_missing.Count > 0 || _iconFont == IntPtr.Zero) && LoggedFonts.Add(key))
+            Log.Write($"font {used} {sizePt}pt dpi {dpi}: icons {(_iconFont != IntPtr.Zero ? "ok" : "missing")}, glyphs drawn with the fallback font: '{new string(_missing.ToArray())}'");
     }
 
     private void FindMissingGlyphs(string face, int px)
@@ -130,12 +133,50 @@ internal sealed class TextRenderer : IDisposable
     public void Draw(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, byte alpha, bool shadow, float maxY = float.MaxValue)
     {
         Gdip.GdipSetTextRenderingHint(g, Gdip.TextRenderingHintAntiAliasGridFit);
+        DrawBacks(g, lines, x0, y0, alpha, maxY);
         if (shadow)
         {
             float off = Math.Max(1, EmPixels / 13f);
             DrawPass(g, lines, x0 + off, y0 + off, _ => (uint)(Math.Min(alpha, (byte)170) << 24), maxY);
         }
         DrawPass(g, lines, x0, y0, c => c.ToArgb(alpha), maxY);
+    }
+
+    /// <summary>
+    /// Backgrounds: line bands (full width, slightly rounded), then run backgrounds behind their cells
+    /// (chips, graph and bar tracks). Their alpha is scaled by the text opacity.
+    /// </summary>
+    private void DrawBacks(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, byte alpha, float maxY)
+    {
+        float y = y0;
+        float pad = Math.Max(1, CellWidth * 0.25f);
+        foreach (var line in lines)
+        {
+            if (y >= maxY) break;
+            if (!line.IsPadding)
+            {
+                if (line.Back.Visible)
+                    Gdip.FillRoundRect(g, line.Back.Color.ToArgb((byte)(line.Back.Alpha * alpha / 255)),
+                        x0 - pad, y, CellWidth * Core.Render.Layout.Width + 2 * pad, LineHeight, LineHeight * 0.25f);
+                int col = 0;
+                int start = -1;
+                Core.Render.Shade cur = default;
+                void Flush(int end)
+                {
+                    if (start >= 0 && cur.Visible && end > start)
+                        Gdip.FillRoundRect(g, cur.Color.ToArgb((byte)(cur.Alpha * alpha / 255)),
+                            x0 + start * CellWidth, y + 1, (end - start) * CellWidth, LineHeight - 2, LineHeight * 0.2f);
+                }
+                foreach (var run in line.Runs)
+                {
+                    // Neighbouring runs with the same background form one shape.
+                    if (run.Back != cur) { Flush(col); cur = run.Back; start = col; }
+                    col += run.Text.Length;
+                }
+                Flush(col);
+            }
+            y += LineHeight;
+        }
     }
 
     private void DrawPass(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, Func<Rgb, uint> color, float maxY)
@@ -207,7 +248,7 @@ internal sealed class TextRenderer : IDisposable
     private void DrawIcon(IntPtr g, string s, uint argb, float x, float y, float width)
     {
         var rect = new RectF(x, y, width, LineHeight);
-        if (!Gdip.DrawGlyphPath(g, _brush, argb, _iconFamily, EmPixels * 0.9f, rect, _center, s))
+        if (!Gdip.DrawGlyphPath(g, _brush, argb, _iconFamily, EmPixels * 0.78f, rect, _center, s))
             DrawCentered(g, s, _iconFont, x, y, width);
     }
 

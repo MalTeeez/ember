@@ -6,7 +6,7 @@ namespace Ember.Core.Net;
 /// <summary>The fields of MIB_IF_ROW2 that Ember uses.</summary>
 public sealed record IfRow(
     ulong Luid, uint Index, string Alias, string Description, uint Type, uint TunnelType, uint MediaType,
-    byte Flags, uint OperStatus, ulong InOctets, ulong OutOctets)
+    byte Flags, uint OperStatus, ulong InOctets, ulong OutOctets, ulong InPackets = 0, ulong OutPackets = 0)
 {
     public bool HardwareInterface => (Flags & 0x01) != 0;
     public bool FilterInterface => (Flags & 0x02) != 0;
@@ -25,6 +25,8 @@ public static class IfTableLayout
     public const int OffType = 1128, OffTunnelType = 1132, OffMediaType = 1136;
     public const int OffFlags = 1152, OffOperStatus = 1156;
     public const int OffInOctets = 1208, OffOutOctets = 1280;
+    // Unicast and non-unicast packet counters follow the octet counters.
+    public const int OffInUcastPkts = 1216, OffInNUcastPkts = 1224, OffOutUcastPkts = 1288, OffOutNUcastPkts = 1296;
 
     public static IfRow ParseRow(ReadOnlySpan<byte> row)
     {
@@ -40,7 +42,9 @@ public static class IfTableLayout
             row[OffFlags],
             BinaryPrimitives.ReadUInt32LittleEndian(row[OffOperStatus..]),
             BinaryPrimitives.ReadUInt64LittleEndian(row[OffInOctets..]),
-            BinaryPrimitives.ReadUInt64LittleEndian(row[OffOutOctets..]));
+            BinaryPrimitives.ReadUInt64LittleEndian(row[OffOutOctets..]),
+            BinaryPrimitives.ReadUInt64LittleEndian(row[OffInUcastPkts..]) + BinaryPrimitives.ReadUInt64LittleEndian(row[OffInNUcastPkts..]),
+            BinaryPrimitives.ReadUInt64LittleEndian(row[OffOutUcastPkts..]) + BinaryPrimitives.ReadUInt64LittleEndian(row[OffOutNUcastPkts..]));
     }
 
     public static List<IfRow> ParseTable(ReadOnlySpan<byte> table)
@@ -93,13 +97,13 @@ public static class AdapterFilter
     }
 }
 
-/// <summary>Rate for one adapter, in bits per second.</summary>
-public sealed record AdapterRate(string Name, double DownBps, double UpBps);
+/// <summary>Rate for one adapter, in bits per second, and packets per second.</summary>
+public sealed record AdapterRate(string Name, double DownBps, double UpBps, double DownPps = 0, double UpPps = 0);
 
 /// <summary>Converts byte counters into rates (difference each sample).</summary>
 public sealed class NetRates
 {
-    private readonly Dictionary<ulong, (ulong In, ulong Out)> _last = new();
+    private readonly Dictionary<ulong, (ulong In, ulong Out, ulong InPk, ulong OutPk)> _last = new();
     private DateTime _lastTime;
 
     public List<AdapterRate> Update(IEnumerable<IfRow> physical, DateTime now)
@@ -107,17 +111,18 @@ public sealed class NetRates
         var result = new List<AdapterRate>();
         double dt = (now - _lastTime).TotalSeconds;
         bool valid = _last.Count > 0 && dt > 0.05;
-        var seen = new Dictionary<ulong, (ulong, ulong)>();
+        var seen = new Dictionary<ulong, (ulong, ulong, ulong, ulong)>();
         foreach (var row in physical)
         {
             if (seen.ContainsKey(row.Luid)) continue;
-            seen[row.Luid] = (row.InOctets, row.OutOctets);
+            seen[row.Luid] = (row.InOctets, row.OutOctets, row.InPackets, row.OutPackets);
             if (valid && _last.TryGetValue(row.Luid, out var prev))
             {
                 // Counter reset or wrap: treat as 0.
-                double down = row.InOctets >= prev.In ? (row.InOctets - prev.In) * 8.0 / dt : 0;
-                double up = row.OutOctets >= prev.Out ? (row.OutOctets - prev.Out) * 8.0 / dt : 0;
-                result.Add(new AdapterRate(row.Alias, down, up));
+                static double Rate(ulong now, ulong before, double dt, double factor) => now >= before ? (now - before) * factor / dt : 0;
+                result.Add(new AdapterRate(row.Alias,
+                    Rate(row.InOctets, prev.In, dt, 8), Rate(row.OutOctets, prev.Out, dt, 8),
+                    Rate(row.InPackets, prev.InPk, dt, 1), Rate(row.OutPackets, prev.OutPk, dt, 1)));
             }
             else if (valid)
             {

@@ -167,3 +167,21 @@ These decisions replace older ones where they conflict (noted in brackets).
 | Y15 | **Preset lists** show the chosen theme/layout name (`Theme.Name`, `LayoutName`); an empty entry stays for "keep as is". | Requested. |
 | Y16 | **Open log:** tray menu and Settings → General → Debug (with Open settings file and Open data folder). Opens with the default program (Notepad if none); makes a short log first if none exists. | Requested. |
 | Y17 | **Notes look:** the top bar has the same colour as the note and shows no title; only the minimize and delete icons show it. Notes have their own opacity (Settings → Notes, default 100 %, 30–100); the widget background and text opacity do not change them. [replaces V18 title bar and the 75 % rule] | Requested. |
+
+## Version 5
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| Z1 | **cpu line:** `cpu   83° graph  25% 3.6GHz` — temperature slot, graph, load, clock with "Hz" (6 characters: `4.8GHz`, `800MHz`). [replaces Y2 for the cpu line] | Requested; "4.8G" alone was unclear. |
+| Z2 | **Hot cores** aligned right with an indent. 1 column: indent 2, `c7   88° graph 100% 5.1GHz` (same right edge as the cpu line). 2 columns: 15 + 1 + 15, indent 1, `c18 ⣴⣶⣿  95% 83°` (graph 7 without temperatures). 3 columns: 9 + 1 + 9 + 1 + 9, indent 3, `c7 ⣶⣿ 95%` (label colour = temperature). Every core shows its load. [replaces Y2 for cores] | Requested. |
+| Z3 | **Core temperature on AMD:** LHM has no per-core sensor, only per CCD (`CCD1 (Tdie)` …). Physical cores (by CPU-set core index) are split evenly over the CCDs in order; a core shows its CCD temperature. | Shows a useful temperature; exact per-core values are not available. |
+| Z4 | **Network lines:** `↓  61M graph 457k pkt` — packets per second (unicast + non-unicast counters of MIB_IF_ROW2), value, space, `pkt`. The graph is still scaled to its peak; the peak value is no longer shown. [replaces Y3] | Requested. |
+| Z5 | **Usage polling:** interval at least 1 min (Claude, Codex). HTTP 429: the last values stay on screen, the interval grows by 30 s per 429 up to 5 min, and goes back to the setting after a success. [replaces the doubling backoff] | Requested. |
+| Z6 | **Header icons** (option): cpu ⟶ Diagnostic, net ⟶ Ethernet, gpu ⟶ TV monitor, memory ⟶ Component, disk ⟶ Hard drive, claude/codex/copilot ⟶ Robot, devices ⟶ Battery, others ⟶ Tag (Segoe MDL2 glyphs). | Requested. |
+| Z7 | **Icons** are 78 % of the font size (was 90 %) and icons before text get one more space. | They were taller than the line and touched the text. |
+| Z8 | **Row backgrounds** (each a toggle, all off by default): stripes on every second line of a section, band behind headers, band behind process lines, track behind graphs, track behind bars, chips behind values in warning/critical colours; one strength slider. Drawn as slightly rounded shapes; runs with the same background join. | Requested. |
+| Z9 | **20 built-in themes** with different backgrounds, header styles, bars and row backgrounds: ember, btop, mono, nord, dusk, glass, gruvbox, dracula, tokyo-night, catppuccin (mocha), latte (light), solarized, everforest, rose-pine, kanagawa, monokai, one-dark, matrix, synthwave, paper (light). Colours from the public palettes of these schemes. | Requested more themes. |
+| Z10 | **Notes:** `>` is a quote (italic, label colour) without indent; `>>` indents one step, `>>>` two. [replaces V19 quote indent] | Requested. |
+| Z11 | **Process details:** the values are read-only edit controls in the theme colours: select with the mouse, copy with Ctrl+C or the context menu. Esc still closes the window. | Requested copyable text. |
+| Z12 | **Font log:** only problems (missing glyphs or no icon font), once per font setup. | Normal start-up logged a line each time. |
+

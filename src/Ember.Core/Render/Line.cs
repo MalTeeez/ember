@@ -12,8 +12,14 @@ public enum RunStyle
     Icon = 2,
 }
 
-/// <summary>A piece of text with one colour and style.</summary>
-public readonly record struct Run(string Text, Rgb Color, RunStyle Style = RunStyle.None);
+/// <summary>A background fill: colour and alpha (0..255).</summary>
+public readonly record struct Shade(Rgb Color, byte Alpha)
+{
+    public bool Visible => Alpha > 0;
+}
+
+/// <summary>A piece of text with one colour and style, and an optional background behind its cells.</summary>
+public readonly record struct Run(string Text, Rgb Color, RunStyle Style = RunStyle.None, Shade Back = default);
 
 /// <summary>What a click on part of a line does.</summary>
 public enum HitAction { None, ProcessDetails, ProcessProperties, ProcessKill, NewNote, HideWidget, RestoreNote, Drag }
@@ -36,6 +42,29 @@ public static class Icons
     public const char Minimize = '';
     public const char OpenFile = '';
 
+    // Section icons (Segoe MDL2 Assets / Fluent Icons).
+    public const char Activity = '\uE9D9';   // Diagnostic: cpu
+    public const char Ethernet = '\uE839';   // net
+    public const char Monitor = '\uE7F4';    // gpu
+    public const char Chip = '\uE950';       // Component: memory
+    public const char Drive = '\uEDA2';      // HardDrive: disk
+    public const char Robot = '\uE99A';      // usage limits (claude, codex, copilot)
+    public const char Battery = '\uE83F';    // devices
+    public const char Tag = '\uE8EC';        // other sections
+
+    /// <summary>Icon for a section header, by its (lower-case) name.</summary>
+    public static char ForSection(string name) => name.Trim().ToLowerInvariant() switch
+    {
+        "cpu" or "processor" or "cores" => Activity,
+        "net" or "network" or "internet" => Ethernet,
+        "gpu" or "graphics" or "video" => Monitor,
+        "memory" or "mem" or "ram" => Chip,
+        "disk" or "disks" or "storage" or "drives" => Drive,
+        "claude" or "codex" or "copilot" or "usage" or "ai" or "limits" => Robot,
+        "devices" or "battery" or "batteries" => Battery,
+        _ => Tag,
+    };
+
     public static bool IsIcon(char c) => c >= '' && c <= '';
 }
 
@@ -46,6 +75,8 @@ public sealed class Line
     public List<Hit> Hits { get; } = new();
     /// <summary>A padding line that keeps space (layout stabilizer). Drawn empty.</summary>
     public bool IsPadding { get; init; }
+    /// <summary>Background band behind the whole line (row stripes, header bands).</summary>
+    public Shade Back { get; set; }
 
     public string Text
     {
@@ -76,7 +107,8 @@ public sealed class Line
         get
         {
             var sb = new StringBuilder();
-            foreach (var r in Runs) sb.Append(r.Color.ToHex()).Append((int)r.Style).Append('|').Append(r.Text).Append('\u0001');
+            sb.Append(Back.Color.ToHex()).Append(Back.Alpha).Append('#');
+            foreach (var r in Runs) sb.Append(r.Color.ToHex()).Append((int)r.Style).Append(r.Back.Color.ToHex()).Append(r.Back.Alpha).Append('|').Append(r.Text).Append('\u0001');
             foreach (var h in Hits) sb.Append(h.Col).Append(',').Append(h.Width).Append(',').Append((int)h.Action).Append(',').Append(h.Arg).Append(';');
             return sb.ToString();
         }
@@ -99,14 +131,14 @@ public sealed class LineBuilder
 
     public int Column => _line.Length;
 
-    public LineBuilder Add(string text, Rgb color, RunStyle style = RunStyle.None)
+    public LineBuilder Add(string text, Rgb color, RunStyle style = RunStyle.None, Shade back = default)
     {
         if (text.Length == 0) return this;
         var runs = _line.Runs;
-        if (runs.Count > 0 && runs[^1].Color == color && runs[^1].Style == style && (style & RunStyle.Icon) == 0)
-            runs[^1] = new Run(runs[^1].Text + text, color, style);
+        if (runs.Count > 0 && runs[^1].Color == color && runs[^1].Style == style && runs[^1].Back == back && (style & RunStyle.Icon) == 0)
+            runs[^1] = new Run(runs[^1].Text + text, color, style, back);
         else
-            runs.Add(new Run(text, color, style));
+            runs.Add(new Run(text, color, style, back));
         return this;
     }
 
@@ -145,7 +177,7 @@ public sealed class LineBuilder
     public LineBuilder Right(params Run[] runs)
     {
         PadTo(Width - Len(runs));
-        foreach (var r in runs) Add(r.Text, r.Color, r.Style);
+        foreach (var r in runs) Add(r.Text, r.Color, r.Style, r.Back);
         return this;
     }
 
@@ -205,13 +237,15 @@ public static class Layout
             "plain" => ("", ""),
             _ => (" ", " "),
         };
-        if (title.Length > Width - 4) title = title[..(Width - 4)];
+        if (title.Length > Width - 8) title = title[..(Width - 8)];
+        // Optional section icon before the title: icon (2 cells) and a space.
+        string iconCells = t.HeaderIcons ? Icons.ForSection(name) + "  " : "";
         string align = t.HeaderAlign is "center" or "right" ? t.HeaderAlign : "left";
         int indent = Math.Max(0, t.HeaderIndent);
         // At the edge: no space between the edge and the title.
         if (indent == 0 && align == "left" && open == " ") open = "";
         if (indent == 0 && align == "right" && close == " ") close = "";
-        int len = open.Length + title.Length + close.Length;
+        int len = open.Length + iconCells.Length + title.Length + close.Length;
         indent = Math.Min(indent, Width - len);
         int lead = align switch
         {
@@ -223,7 +257,9 @@ public static class Layout
 
         var b = new LineBuilder();
         Fill(b, t.HeaderStyle, lead, left: true, c);
-        b.Add(open, c.Rule).Add(title, c.Header, hs).Add(close, c.Rule);
+        b.Add(open, c.Rule);
+        if (iconCells.Length > 0) b.Icon(iconCells[0], c.Header).Add(" ", c.Rule);
+        b.Add(title, c.Header, hs).Add(close, c.Rule);
         Fill(b, t.HeaderStyle, trail, left: false, c);
         return b.Build();
     }

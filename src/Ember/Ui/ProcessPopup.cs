@@ -96,6 +96,18 @@ internal sealed class ProcessPopup : Win32Window
     private float _scale = 1;
     private int _headerH;
     private bool _modal; // a message box is open: do not close on deactivation
+    private readonly List<IntPtr> _edits = new(); // read-only edit controls: the values can be selected and copied
+    private IntPtr _editFont, _editBoldFont, _bgBrush;
+    private Rgb _bgSolid;
+
+    /// <summary>Esc in a value field closes the popup (the edit control would eat the key).</summary>
+    public static bool PreTranslate(ref MSG msg)
+    {
+        if (_open is not { IsAlive: true } p || msg.message != W.WM_KEYDOWN || (int)msg.wParam != 0x1B) return false;
+        if (msg.hwnd != p.Handle && !W.IsChild(p.Handle, msg.hwnd)) return false;
+        p.Destroy();
+        return true;
+    }
 
     private ProcessPopup(int pid, ThemeColors c)
     {
@@ -155,11 +167,35 @@ internal sealed class ProcessPopup : Win32Window
         int y = Math.Clamp(at.Y + S(12), work.Top, Math.Max(work.Top, work.Bottom - h));
         CreateHandle(ClassName, "Ember — " + _title, W.WS_EX_TOOLWINDOW, W.WS_POPUP, x, y, w, h, IntPtr.Zero);
         W.SetWindowRgn(Handle, W.CreateRoundRectRgn(0, 0, w + 1, h + 1, S(16), S(16)), false);
+        CreateValueFields(w);
         W.ShowWindow(Handle, W.SW_SHOW);
         W.SetForegroundWindow(Handle);
     }
 
     private int S(double v) => (int)Math.Round(v * _scale);
+
+    /// <summary>
+    /// Title, subtitle and row values are read-only edit controls without a border, in the theme
+    /// colours: the text can be selected with the mouse and copied with Ctrl+C (or the context menu).
+    /// </summary>
+    private void CreateValueFields(int w)
+    {
+        _bgSolid = Rgb.Lerp(Rgb.Parse(_c.Theme.Background.Color, Palette.Background), new Rgb(0, 0, 0), 0.15);
+        _bgBrush = W.CreateSolidBrush(_bgSolid.ToColorRef());
+        _editFont = W.CreateFont(-S(12.5), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
+        _editBoldFont = W.CreateFont(-S(12.5), 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
+        float y = _headerH + S(6);
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            var e = W.CreateWindowEx(0, "EDIT", _rows[i].Value.Replace("\n", "\r\n"),
+                W.WS_CHILD | W.WS_VISIBLE | W.ES_MULTILINE | W.ES_READONLY | W.ES_AUTOVSCROLL,
+                S(120), (int)y, w - S(140), _rowHeights[i], Handle, IntPtr.Zero, Instance, IntPtr.Zero);
+            W.SendMessage(e, W.WM_SETFONT, i == 0 ? _editBoldFont : _editFont, (IntPtr)1);
+            W.SendMessage(e, W.EM_SETMARGINS, (IntPtr)3, IntPtr.Zero); // no left/right margin: aligned like painted text
+            _edits.Add(e);
+            y += _rowHeights[i];
+        }
+    }
 
     /// <summary>Computes row heights (command line wraps) and button places; returns the window height.</summary>
     private int Layout(int w)
@@ -262,7 +298,6 @@ internal sealed class ProcessPopup : Win32Window
         for (int i = 0; i < _rows.Count; i++)
         {
             Text(_rows[i].Label, font, _c.Label, S(16), y, S(100), S(20));
-            Text(_rows[i].Value, i == 0 ? boldFont : font, _c.Text, S(120), y, w - S(140));
             y += _rowHeights[i];
         }
 
@@ -308,6 +343,11 @@ internal sealed class ProcessPopup : Win32Window
             }
             case W.WM_ERASEBKGND:
                 return (IntPtr)1;
+            case W.WM_CTLCOLORSTATIC: // read-only edits
+            case W.WM_CTLCOLOREDIT:
+                W.SetTextColor(wParam, _c.Text.ToColorRef());
+                W.SetBkColor(wParam, _bgSolid.ToColorRef());
+                return _bgBrush;
             case W.WM_NCHITTEST:
             {
                 var p = new POINT(W.LoWord(lParam), W.HiWord(lParam));
@@ -353,6 +393,7 @@ internal sealed class ProcessPopup : Win32Window
                 return IntPtr.Zero;
             case W.WM_DESTROY:
                 if (_open == this) _open = null;
+                foreach (var h in new[] { _editFont, _editBoldFont, _bgBrush }) if (h != IntPtr.Zero) W.DeleteObject(h);
                 return IntPtr.Zero;
         }
         return base.OnMessage(msg, wParam, lParam);

@@ -212,12 +212,18 @@ internal sealed partial class Sampler : IDisposable
     /// <summary>
     /// Temperature of each logical core: LHM gives one per physical core ("CPU Core #n", or "P-Core #n"
     /// then "E-Core #n"). Physical cores are ordered by their CPU-set core index (P-cores first on Intel hybrid).
-    /// Unknown → NaN (for example AMD, where LHM has no per-core temperature).
+    /// AMD (no per-core sensor in LHM): the temperature of the core's CCD. Unknown → NaN.
     /// </summary>
     private double[]? CoreTemps(List<(int Group, int Number, double Value)> logical)
     {
         var lhm = _temps.CoreTemps;
-        if (lhm.Count == 0) return null;
+        if (lhm.Count == 0)
+        {
+            // AMD: no per-core sensor; each core gets the temperature of its CCD (core die).
+            if (_temps.CcdTemps.Count == 0) return null;
+            var phys = logical.Select(x => _cpuSets.TryGetValue((x.Group, x.Number), out var cs) ? cs.Core : -1).ToArray();
+            return Core.Stats.CoreTempMap.ByCcd(phys, _temps.CcdTemps);
+        }
         var ordered = lhm.Where(t => t.Name.StartsWith("CPU Core", StringComparison.Ordinal)).ToList();
         if (ordered.Count == 0)
             ordered = lhm.Where(t => t.Name.StartsWith("P-", StringComparison.Ordinal)).Concat(lhm.Where(t => t.Name.StartsWith("E-", StringComparison.Ordinal))).ToList();

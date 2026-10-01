@@ -78,6 +78,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
     {
         while (W.GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
         {
+            if (Ember.Ui.ProcessPopup.PreTranslate(ref msg)) continue;
             if (IsDialogMessageForOpenWindows(ref msg)) continue;
             W.TranslateMessage(ref msg);
             W.DispatchMessage(ref msg);

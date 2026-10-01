@@ -28,8 +28,8 @@ public static class DemoData
         if (s.Net is not { Count: > 1 })
             s.Net = new List<AdapterRate>
             {
-                new("Ethernet", Wave(15, 2e6, 90e6), Wave(9, 0.3e6, 6e6)),
-                new("Wi-Fi", Wave(23, 0.1e6, 20e6, 0.3), Wave(7, 0.05e6, 2e6)),
+                new("Ethernet", Wave(15, 2e6, 90e6), Wave(9, 0.3e6, 6e6), Wave(15, 300, 9000), Wave(9, 100, 3000)),
+                new("Wi-Fi", Wave(23, 0.1e6, 20e6, 0.3), Wave(7, 0.05e6, 2e6), Wave(23, 20, 2000, 0.3), Wave(7, 10, 800)),
             };
         s.Quality ??= new NetQuality(Wave(31, 0, 12), Wave(29, 0, 15), Wave(13, 4, 40), Wave(17, 30, 180), true);
 

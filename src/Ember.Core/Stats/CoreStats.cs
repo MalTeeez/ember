@@ -141,3 +141,24 @@ public static class CoreGrid
     /// <summary>Kubernetes-style total: one fully used core = 100 %.</summary>
     public static double CoreSum(IEnumerable<HotCore> cores) => cores.Sum(c => c.Load);
 }
+
+/// <summary>Maps die temperatures to logical cores.</summary>
+public static class CoreTempMap
+{
+    /// <summary>
+    /// AMD: physical cores (by their core index) are split evenly over the CCDs in order: with 2 CCDs
+    /// and 12 cores, cores 0–5 get CCD1 and 6–11 CCD2. Logical cores of one physical core share it.
+    /// Unknown core index (-1) → NaN.
+    /// </summary>
+    public static double[] ByCcd(IReadOnlyList<int> physicalCoreOfLogical, IReadOnlyList<double> ccdTemps)
+    {
+        var order = physicalCoreOfLogical.Where(c => c >= 0).Distinct().OrderBy(c => c).ToList();
+        var result = new double[physicalCoreOfLogical.Count];
+        for (int i = 0; i < result.Length; i++)
+        {
+            int k = order.IndexOf(physicalCoreOfLogical[i]);
+            result[i] = k < 0 || ccdTemps.Count == 0 ? double.NaN : ccdTemps[Math.Min(ccdTemps.Count - 1, k * ccdTemps.Count / order.Count)];
+        }
+        return result;
+    }
+}

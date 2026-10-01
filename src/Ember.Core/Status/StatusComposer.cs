@@ -146,6 +146,7 @@ public sealed class StatusComposer
         }
 
         var result = new List<Line>();
+        var decos = new HashSet<Line>(ReferenceEqualityComparer.Instance);
         for (int i = 0; i < entries.Count; i++)
         {
             var e = entries[i];
@@ -156,8 +157,12 @@ public sealed class StatusComposer
                 continue;
             }
             if (e.Collapse && GroupHeight(entries, height, i) == 0) continue;
-            result.Add(e.Kind == "header" ? Layout.Header(e.Text ?? "", _c) : Layout.Spacer(e.Preset, e.Text, _c));
+            var deco = e.Kind == "header" ? Layout.Header(e.Text ?? "", _c) : Layout.Spacer(e.Preset, e.Text, _c);
+            if (e.Kind == "header" && _c.Theme.HeaderBand) deco.Back = _c.Band(_c.Header, 30);
+            result.Add(deco);
+            decos.Add(deco);
         }
+        if (_c.Theme.RowStripes) Stripe(result, decos);
         // No empty lines at the top or bottom of the widget.
         while (result.Count > 0 && IsEmpty(result[0]) && !result[0].IsPadding) result.RemoveAt(0);
         while (result.Count > 0 && IsEmpty(result[^1]) && !result[^1].IsPadding) result.RemoveAt(result.Count - 1);
@@ -168,6 +173,18 @@ public sealed class StatusComposer
     }
 
     private static bool IsEmpty(Line l) => l.Text.Trim().Length == 0 && l.Hits.Count == 0;
+
+    /// <summary>Every second content line of a section gets a faint band (counting restarts after a header or blank line).</summary>
+    private void Stripe(List<Line> lines, HashSet<Line> decos)
+    {
+        int n = 0;
+        foreach (var l in lines)
+        {
+            bool content = !l.IsPadding && !IsEmpty(l) && !l.Hits.Any(h => h.Action == HitAction.NewNote);
+            if (!content || decos.Contains(l) || l.Back.Visible) { n = 0; continue; }
+            if (n++ % 2 == 1) l.Back = _c.Band(_c.Text, 16);
+        }
+    }
 
     /// <summary>Kept height of the items after a header/spacer (skipping headers/spacers, up to the next one after an item).</summary>
     private static int GroupHeight(List<LayoutEntry> entries, int[] height, int index)
@@ -194,7 +211,16 @@ public sealed class StatusComposer
         return b.PadTo(Layout.LabelWidth);
     }
 
-    private LineBuilder Val(LineBuilder b, string text, Rgb? color = null) => b.Add(text, color ?? _c.Text, ValueStyle);
+    /// <summary>A value. In a warning/critical colour (not the text colour) it can get a chip behind it.</summary>
+    private LineBuilder Val(LineBuilder b, string text, Rgb? color = null)
+    {
+        var c = color ?? _c.Text;
+        bool chip = _c.Theme.ValueChips && c != _c.Text && text.Trim().Length > 0;
+        return b.Add(text, c, ValueStyle, chip ? _c.Band(c, 60) : default);
+    }
+
+    private Shade GraphBack => _c.Theme.GraphTrack ? _c.Band(_c.Dim, 50) : default;
+    private Shade BarBack => _c.Theme.BarTrack ? _c.Band(_c.Dim, 50) : default;
 
     /// <summary>
     /// Braille graph from <paramref name="col"/> for <paramref name="chars"/> characters (default: to the right edge);
@@ -207,7 +233,7 @@ public sealed class StatusComposer
         if (chars <= 0) return;
         var (text, max) = Glyphs.Graph(values, chars, scale);
         for (int i = 0; i < text.Length; i++)
-            b.Add(text[i].ToString(), double.IsNaN(max[i]) ? _c.Dim : _c.GraphCell(scale > 0 ? max[i] / scale : 0, accent));
+            b.Add(text[i].ToString(), double.IsNaN(max[i]) ? _c.Dim : _c.GraphCell(scale > 0 ? max[i] / scale : 0, accent), RunStyle.None, GraphBack);
     }
 
     /// <summary>"  └ name.exe        58% ⓘ ⚙ ✕" — click = details; icons = details, file properties, end process.</summary>
@@ -224,7 +250,9 @@ public sealed class StatusComposer
         b.Button(Icons.Info, _c.Icon, HitAction.ProcessDetails, pid, "Details");
         b.Button(Icons.OpenFile, _c.Icon, HitAction.ProcessProperties, pid, "File properties");
         b.Button(Icons.Cancel, _c.Crit, HitAction.ProcessKill, pid, "End process");
-        return b.Build();
+        var line = b.Build();
+        if (_c.Theme.ProcessBand) line.Back = _c.Band(_c.Process, 22);
+        return line;
     }
 
     private Line Toolbar(ComposeContext ctx)
@@ -257,21 +285,18 @@ public sealed class StatusComposer
 
         if (On("cpu.load"))
         {
-            // "cpu  4.8G  82° ⣀⣠⣴⣶⣿…" — no load number: the graph shows the load.
+            // "cpu   83° ⣀⣠⣴⣶⣿…  45% 4.8GHz" — temperature, graph, load, clock.
             var b = Label("cpu", _c.Cpu);
-            int col = Layout.F1;
-            if (f.CpuClock)
-            {
-                if (cpu.ClockMHz is { } clk) b.Add(Format.Clock4(clk), _c.Unit);
-                col += Layout.FieldWidth + 1;
-            }
             if (f.CpuTemp)
             {
-                b.PadTo(col);
                 if (tempVis) Val(b, Format.Temp4(cpu.Temp!.Value), _c.Severity(cpu.Temp.Value, t.CpuTemp.Warn, t.CpuTemp.Crit));
-                col += Layout.FieldWidth + 1;
+                b.PadTo(Layout.F2);
             }
-            Graph(b, h.Values, 100, _c.Cpu, col);
+            int right = Layout.FieldWidth + 1 + (f.CpuClock ? 7 : 0);
+            Graph(b, h.Values, 100, _c.Cpu, b.Column, Layout.Width - right - b.Column);
+            b.Add(" ", _c.Dim);
+            Val(b, Format.Pct4(load), _c.Text);
+            if (f.CpuClock) b.Add(" ", _c.Dim).Add(cpu.ClockMHz is { } clk ? Format.Hz6(clk) : "      ", _c.Unit);
             items["cpu.load"] = new() { b.Build() };
         }
 
@@ -331,9 +356,10 @@ public sealed class StatusComposer
     }
 
     /// <summary>
-    /// Hot cores in 1, 2 or 3 columns (at most 3 rows), btop style, without load numbers (the graphs
-    /// show the load). More than 9 cores: the best 9 by score, and one line "n hot cores hidden, at y%"
-    /// (one fully used core = 100 %).
+    /// Hot cores in 1, 2 or 3 columns (at most 3 rows), btop style, aligned right with an indent (they
+    /// belong to the cpu line). Each core: label (colour = temperature), graph, load, and temperature
+    /// (1 and 2 columns) and clock (1 column) when known. More than 9 cores: the best 9 by score, and
+    /// one line "n hot cores hidden, at y%" (one fully used core = 100 %).
     /// </summary>
     private List<Line> CoreGridLines(List<HotCore> hot, bool details)
     {
@@ -342,28 +368,27 @@ public sealed class StatusComposer
         var (shown, hidden) = CoreGrid.Select(hot);
         int cols = CoreGrid.Columns(shown.Count);
         int rows = (shown.Count + cols - 1) / cols;
-        int cell = (Layout.Width - (cols - 1)) / cols; // 1 column: 32, 2: 15, 3: 10
+        bool temps = details && shown.Any(h => !double.IsNaN(h.Temp));
+        bool clocks = details && shown.Any(h => h.ClockMHz > 0);
+        // Cell width and gap: 1 column 30 (indent 2), 2 columns 15 + 1 + 15 (indent 1), 3 columns 9 + 1 + 9 + 1 + 9 (indent 2).
+        var (cell, gap) = cols switch { 1 => (30, 0), 2 => (15, 1), _ => (9, 1) };
+        int indent = Layout.Width - (cols * cell + (cols - 1) * gap);
         for (int r = 0; r < rows; r++)
         {
-            if (cols == 1)
-            {
-                lines.Add(CoreLine(shown[r], details));
-                continue;
-            }
             var b = new LineBuilder();
             for (int c = 0; c < cols; c++)
             {
                 int k = r + c * rows; // fill column by column, so numbers read top to bottom
                 if (k >= shown.Count) break;
-                b.PadTo(c * (cell + 1));
-                CoreCell(b, shown[k], cell, cols == 2 && details);
+                b.PadTo(indent + c * (cell + gap));
+                CoreCell(b, shown[k], cell, cols, temps, clocks);
             }
             lines.Add(b.Build());
         }
         if (hidden.Count > 0)
         {
             var b = new LineBuilder();
-            b.Add(" ", _c.Dim).Add($"{hidden.Count} hot cores hidden, at ", _c.Unit);
+            b.Add("  ", _c.Dim).Add($"{hidden.Count} hot cores hidden, at ", _c.Unit);
             Val(b, Format.Int(CoreGrid.CoreSum(hidden)) + "%");
             lines.Add(b.Build());
         }
@@ -376,37 +401,32 @@ public sealed class StatusComposer
         return double.IsNaN(temp) ? _c.Label : _c.Severity(temp, t.CpuTemp.Warn, t.CpuTemp.Crit, _c.Label);
     }
 
-    /// <summary>One column, like the cpu line: "c7   4.8G  82° ⣀⣠⣴⣶⣿⣿…" — clock, temperature, braille graph.</summary>
-    private Line CoreLine(HotCore core, bool details)
-    {
-        var t = _cfg.Thresholds;
-        var b = Label("c" + core.Index, TempColor(core.Temp));
-        int col = Layout.F1;
-        if (details)
-        {
-            if (core.ClockMHz > 0) b.Add(Format.Clock4(core.ClockMHz), _c.Unit);
-            b.PadTo(col += Layout.FieldWidth + 1);
-            if (!double.IsNaN(core.Temp)) Val(b, Format.Temp4(core.Temp), _c.Severity(core.Temp, t.CpuTemp.Warn, t.CpuTemp.Crit));
-            col += Layout.FieldWidth + 1;
-        }
-        Graph(b, Hist("core." + core.Index).Values, 100, _c.Cpu, col);
-        return b.Build();
-    }
-
     /// <summary>
-    /// Grid cell of <paramref name="width"/> characters: "c7  ⣴⣶⣿⣿⣿⣿ 82°" (2 columns, with temperature) or
-    /// "c7  ⣶⣿⣿⣿⣿⣿" (3 columns). The label colour shows the temperature (normal → warning → critical).
+    /// One core in a cell of <paramref name="width"/> characters:
+    /// 1 column: "c7   83° ⣀⣠⣴⣶⣿…  95% 5.1GHz" (same right edge as the cpu line);
+    /// 2 columns: "c18 ⣴⣶⣿  95% 83°" (graph longer without temperatures); 3 columns: "c7 ⣶⣿ 95%".
     /// </summary>
-    private void CoreCell(LineBuilder b, HotCore core, int width, bool temp)
+    private void CoreCell(LineBuilder b, HotCore core, int width, int cols, bool temps, bool clocks)
     {
         var t = _cfg.Thresholds;
         int start = b.Column;
         string label = "c" + core.Index;
-        b.Add(label.Length > 3 ? label[..3] : label, TempColor(core.Temp)).PadTo(start + 4);
-        bool showTemp = temp && !double.IsNaN(core.Temp);
-        int graphChars = width - 4 - (temp ? Layout.FieldWidth : 0);
-        Graph(b, Hist("core." + core.Index).Values, 100, _c.Cpu, start + 4, graphChars);
-        if (showTemp) Val(b, Format.Temp4(core.Temp), _c.Severity(core.Temp, t.CpuTemp.Warn, t.CpuTemp.Crit));
+        int labelW = cols == 3 ? 3 : 4;
+        b.Add(label.Length > labelW ? label[..labelW] : label, TempColor(core.Temp)).PadTo(start + labelW);
+        var tempRun = double.IsNaN(core.Temp) ? "    " : Format.Temp4(core.Temp);
+        var tempColor = double.IsNaN(core.Temp) ? _c.Dim : _c.Severity(core.Temp, t.CpuTemp.Warn, t.CpuTemp.Crit);
+        if (cols == 1 && temps)
+        {
+            Val(b, tempRun, tempColor);
+            b.Add(" ", _c.Dim);
+        }
+        int right = Layout.FieldWidth + (cols == 1 ? 1 + (clocks ? 7 : 0) : 0) + (cols == 2 && temps ? Layout.FieldWidth : 0);
+        int graph = start + width - right - b.Column;
+        Graph(b, Hist("core." + core.Index).Values, 100, _c.Cpu, b.Column, graph);
+        if (cols == 1) b.Add(" ", _c.Dim);
+        Val(b, Format.Pct4(core.Load));
+        if (cols == 1 && clocks) b.Add(" ", _c.Dim).Add(core.ClockMHz > 0 ? Format.Hz6(core.ClockMHz) : "      ", _c.Unit);
+        if (cols == 2 && temps) Val(b, tempRun, tempColor);
     }
 
     // ───────────── Network ─────────────
@@ -421,8 +441,9 @@ public sealed class StatusComposer
             hd.Add(down);
             var hu = Hist("net.up");
             hu.Add(up);
-            if (On("net.down")) items["net.down"] = new() { NetLine("↓", down, hd, _c.NetDown, bytes) };
-            if (On("net.up")) items["net.up"] = new() { NetLine("↑", up, hu, _c.NetUp, bytes) };
+            double downPk = net.Sum(a => a.DownPps), upPk = net.Sum(a => a.UpPps);
+            if (On("net.down")) items["net.down"] = new() { NetLine("↓", down, downPk, hd, _c.NetDown, bytes) };
+            if (On("net.up")) items["net.up"] = new() { NetLine("↑", up, upPk, hu, _c.NetUp, bytes) };
 
             // Adapter names: only when more than one physical adapter has traffic.
             var active = net.Where(a => a.DownBps + a.UpBps >= AdapterTrafficBps).ToList();
@@ -433,8 +454,8 @@ public sealed class StatusComposer
                 {
                     var b = new LineBuilder();
                     b.Add("  └ ", _c.Dim).Add(Format.Fit(a.Name, 10), _c.Label)
-                     .Add(" ↓", _c.NetDown).Add(Format.Rate4(a.DownBps, bytes), _c.Text)
-                     .Add(" ↑", _c.NetUp).Add(Format.Rate4(a.UpBps, bytes), _c.Text);
+                     .Add(" ↓ ", _c.NetDown).Add(Format.Rate4(a.DownBps, bytes), _c.Text)
+                     .Add(" ↑ ", _c.NetUp).Add(Format.Rate4(a.UpBps, bytes), _c.Text);
                     lines.Add(b.Build());
                 }
                 items["net.adapters"] = lines;
@@ -467,16 +488,17 @@ public sealed class StatusComposer
         return b.Build();
     }
 
-    /// <summary>"↓  61M ⣀⣠⣤⣴⣶⣿… 98M" — value, graph scaled to the peak, then the peak of the graph window.</summary>
-    private Line NetLine(string arrow, double bps, History h, Rgb accent, bool bytes)
+    /// <summary>"↓  61M ⣀⣠⣤⣴⣶⣿… 457k pkt" — rate, graph (scaled to its peak), packets per second.</summary>
+    private Line NetLine(string arrow, double bps, double pps, History h, Rgb accent, bool bytes)
     {
         double peak = Math.Max(h.Max, bps);
         var b = new LineBuilder();
         b.Add(arrow + " ", accent);
         Val(b, Format.Rate4(bps, bytes));
-        int col = 2 + Layout.FieldWidth + 1;
-        Graph(b, h.Values, peak <= 0 ? 1 : peak, accent, col, Layout.Width - col - Layout.FieldWidth - 1);
-        b.Add(" ", _c.Dim).Add(Format.Rate4(peak, bytes), _c.Unit);
+        b.Add(" ", _c.Dim);
+        string pkt = Format.Pkt(pps);
+        Graph(b, h.Values, peak <= 0 ? 1 : peak, accent, b.Column, Layout.Width - b.Column - pkt.Length - 1);
+        b.Add(" ", _c.Dim).Add(Format.Count4(pps), _c.Unit).Add(" pkt", _c.Dim);
         return b.Build();
     }
 
@@ -701,7 +723,7 @@ public sealed class StatusComposer
             string name = d.Charging == true ? Format.Fit(d.Name, 14).TrimEnd().PadRight(14) + " +" : Format.Fit(d.Name, 16);
             b.Add(name.Length > 16 ? name[..16] : name.PadRight(16), _c.Device).Add(" ", _c.Dim);
             var (bar, filled) = Glyphs.StyledBar(d.Percent / 100.0, 10, _c.Theme.BarStyle);
-            for (int i = 0; i < bar.Length; i++) b.Add(bar[i].ToString(), i < filled ? c : _c.Dim);
+            for (int i = 0; i < bar.Length; i++) b.Add(bar[i].ToString(), i < filled ? c : _c.Dim, RunStyle.None, BarBack);
             b.Add(" ", _c.Dim);
             Val(b, Format.Pct4(d.Percent), c);
             lines.Add(b.Build());
@@ -728,7 +750,7 @@ public sealed class StatusComposer
         {
             bool on = i < filled;
             var color = !on ? _c.Dim : theme.BarGradient ? Rgb.Stops(_c.GraphStops, (i + 0.5) / barWidth) : accent;
-            b.Add(bar[i].ToString(), color, on && theme.BoldValues ? RunStyle.Bold : RunStyle.None);
+            b.Add(bar[i].ToString(), color, on && theme.BoldValues ? RunStyle.Bold : RunStyle.None, BarBack);
         }
         b.Add(" ", _c.Dim);
         Val(b, Format.Pct4(c.Used));
@@ -738,7 +760,7 @@ public sealed class StatusComposer
         r.Add(" ", _c.Dim);
         if (c.ResetIn is { } reset)
         {
-            r.Icon(Icons.Refresh, _c.Icon);
+            r.Icon(Icons.Refresh, _c.Icon).Add(" ", _c.Dim);
             Val(r, Format.Duration(reset));
         }
         if (showProjection) Projection(r, c.Projection, projection);
@@ -752,7 +774,7 @@ public sealed class StatusComposer
         switch (p.Kind)
         {
             case ProjectionKind.Lasts:
-                runs = new[] { new Run(Icons.Clock + " ", _c.Icon, RunStyle.Icon), new Run("will last", _c.Unit) };
+                runs = new[] { new Run(Icons.Clock + " ", _c.Icon, RunStyle.Icon), new Run(" will last", _c.Unit) };
                 break;
             case ProjectionKind.Limit:
             {
@@ -760,15 +782,15 @@ public sealed class StatusComposer
                 string d = Format.Duration(p.TimeToReset - p.TimeToLimit);
                 runs = new[]
                 {
-                    new Run(Icons.Warning + " ", color, RunStyle.Icon), new Run("empty ", color),
+                    new Run(Icons.Warning + " ", color, RunStyle.Icon), new Run(" empty ", color),
                     new Run(d, color, ValueStyle), new Run(" before reset", color),
                 };
                 if (r.Column + 2 + LineBuilder.Len(runs) > Layout.Width) runs[3] = new Run(" early", color);
                 break;
             }
             default:
-                runs = new[] { new Run(Icons.Clock + " ", _c.Dim, RunStyle.Icon), new Run("too early to project", _c.Dim) };
-                if (r.Column + 2 + LineBuilder.Len(runs) > Layout.Width) runs[1] = new Run("too early", _c.Dim);
+                runs = new[] { new Run(Icons.Clock + " ", _c.Dim, RunStyle.Icon), new Run(" too early to project", _c.Dim) };
+                if (r.Column + 2 + LineBuilder.Len(runs) > Layout.Width) runs[1] = new Run(" too early", _c.Dim);
                 break;
         }
         r.Right(runs);

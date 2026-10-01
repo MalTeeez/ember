@@ -45,16 +45,16 @@ public class ComposerTests
         var lines = new StatusComposer().Compose(Snap(0, clock: 4200), Cfg());
         // cpu, spacer, net header, down, up
         Assert.Equal(5, lines.Count);
-        Assert.StartsWith("cpu  4.2G", lines[0].Text);
-        Assert.DoesNotContain("%", lines[0].Text); // the graph shows the load
+        // label, temperature slot (5..9), graph (10..19), load, clock with its unit
+        Assert.StartsWith("cpu  ", lines[0].Text);
+        Assert.EndsWith("  23% 4.2GHz", lines[0].Text);
+        Assert.All(lines[0].Text.Substring(10, 10), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
         Assert.StartsWith("\u2500\u2500 net \u2500", lines[2].Text);
         Assert.StartsWith("\u2193  61M ", lines[3].Text);
-        Assert.EndsWith(" 61M", lines[3].Text); // peak after the graph
+        Assert.EndsWith(" pkt", lines[3].Text); // packets per second after the graph
         Assert.StartsWith("\u2191 2.1M ", lines[4].Text);
         Assert.All(lines, l => Assert.Equal(Layout.Width, l.Length));
-        // Graph from after the fields to the right edge: clock (5..8), temperature slot (10..13), graph 15..31.
-        Assert.All(lines[0].Text.Substring(15), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
-        Assert.All(lines[3].Text.Substring(7, 20), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
+        Assert.All(lines[3].Text.Substring(7, 15), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class ComposerTests
     {
         // No load number on the cpu line; the graph's last cell is full (not more).
         var line = new StatusComposer().Compose(Snap(0, load: 130), Cfg())[0].Text;
-        Assert.Equal('\u28B8', line[^1]);
+        Assert.Contains(" 100% ", line);
     }
 
     [Fact]
@@ -162,9 +162,11 @@ public class ComposerTests
         clocks[7] = 5100;
         List<Line> lines = new();
         for (int i = 0; i <= 6; i++) lines = c.Compose(Snap(i, load: 21, cores: cores, coreTemps: temps, coreClocks: clocks), cfg);
-        var core = lines.Single(l => l.Text.StartsWith("c7"));
-        Assert.StartsWith("c7   5.1G  88\u00B0 ", core.Text);
-        Assert.All(core.Text.Substring(15), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
+        // Indented by 2 (part of the cpu line): label, temperature, graph, load, clock.
+        var core = lines.Single(l => l.Text.StartsWith("  c7"));
+        Assert.StartsWith("  c7   88\u00B0 ", core.Text);
+        Assert.EndsWith(" 100% 5.1GHz", core.Text);
+        Assert.All(core.Text.Substring(11, 9), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
     }
 
     [Fact]
@@ -257,11 +259,11 @@ public class ComposerTests
         // filled and empty cells differ in colour
         Assert.True(lines[h + 1].Runs.Where(r => r.Text.Contains(':')).Select(r => r.Color).Distinct().Count() >= 2);
         // Two lines per limit: bar, then refresh time and projection.
-        Assert.StartsWith(" " + Icons.Refresh + " 3h10m ", lines[h + 2].Text);
+        Assert.StartsWith(" " + Icons.Refresh + "  3h10m ", lines[h + 2].Text); // a space after the icon
         Assert.EndsWith("will last", lines[h + 2].Text);
         Assert.StartsWith("week ::::", lines[h + 3].Text);
         Assert.Equal(lines[h + 1].Text.Count(ch => ch == ':'), lines[h + 3].Text.Count(ch => ch == ':')); // same bar length
-        Assert.StartsWith(" " + Icons.Refresh + " 4d2h ", lines[h + 4].Text);
+        Assert.StartsWith(" " + Icons.Refresh + "  4d2h ", lines[h + 4].Text);
         Assert.EndsWith("empty 1d22h early", lines[h + 4].Text);
     }
 

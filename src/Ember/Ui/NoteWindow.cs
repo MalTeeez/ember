@@ -308,8 +308,8 @@ internal sealed class NoteWindow : Win32Window
                 W.SendMessage(_edit, W.EM_EXSETSEL, IntPtr.Zero, ref range);
                 var cf = Format(span);
                 W.SendMessage(_edit, W.EM_SETCHARFORMAT, (IntPtr)W.SCF_SELECTION, ref cf);
-                // Quotes: indent the paragraph by its depth.
-                if ((span.Style & MdStyle.Quote) != 0 && (span.Style & MdStyle.Marker) == 0) SetIndent(span.Level * 280);
+                // Quotes: ">" is only styled (italic, label colour); ">>" and deeper indent one step per extra level.
+                if ((span.Style & MdStyle.Quote) != 0 && (span.Style & MdStyle.Marker) == 0 && span.Level > 1) SetIndent((span.Level - 1) * 280);
             }
 
             W.SendMessage(_edit, W.EM_EXSETSEL, IntPtr.Zero, ref sel);

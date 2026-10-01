@@ -40,7 +40,7 @@ internal abstract class UsagePoller : IDisposable
     /// <summary>Applies the interval and on/off setting. Polls soon when turned on.</summary>
     public void Configure(bool enabled, double intervalSeconds)
     {
-        var interval = TimeSpan.FromSeconds(Math.Clamp(intervalSeconds, 15, 3600));
+        var interval = TimeSpan.FromSeconds(Math.Clamp(intervalSeconds, 60, 3600));
         bool changed = interval != _backoff.Base || enabled != _enabled;
         _backoff.Base = interval;
         if (!changed) return;
@@ -116,8 +116,9 @@ internal abstract class UsagePoller : IDisposable
         using var resp = await Http.SendAsync(req).ConfigureAwait(false);
         if (resp.StatusCode == HttpStatusCode.TooManyRequests)
         {
+            // Rate limited: keep the last data (reset times are absolute, so it stays correct) and wait longer.
             _backoff.OnRateLimited();
-            Fail(Source + ".429");
+            Log.SourceFailed(Source + ".429");
             Log.Write($"{Source}: 429, next poll in {_backoff.Current}");
             return;
         }

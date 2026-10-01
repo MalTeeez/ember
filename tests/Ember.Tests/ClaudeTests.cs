@@ -161,15 +161,16 @@ public class UsageParsingTests
     }
 
     [Fact]
-    public void Backoff_DoublesOn429_ResetsOnSuccess()
+    public void Backoff_Plus30sOn429_UpTo5Min_ResetsOnSuccess()
     {
-        var b = new PollBackoff(TimeSpan.FromMinutes(1));
+        var b = new PollBackoff(TimeSpan.FromSeconds(15)); // below the minimum: 1 min
+        Assert.Equal(TimeSpan.FromMinutes(1), b.Current);
+        b.OnRateLimited();
+        Assert.Equal(TimeSpan.FromSeconds(90), b.Current);
         b.OnRateLimited();
         Assert.Equal(TimeSpan.FromMinutes(2), b.Current);
-        b.OnRateLimited();
-        Assert.Equal(TimeSpan.FromMinutes(4), b.Current);
         for (int i = 0; i < 20; i++) b.OnRateLimited();
-        Assert.Equal(TimeSpan.FromHours(1), b.Current);
+        Assert.Equal(TimeSpan.FromMinutes(5), b.Current);
         b.OnSuccess();
         Assert.Equal(TimeSpan.FromMinutes(1), b.Current);
     }
