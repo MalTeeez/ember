@@ -100,6 +100,8 @@ public sealed class BackgroundTheme
     public int Padding { get; set; } = 10;
     /// <summary>Gradient direction in degrees (90 = top to bottom).</summary>
     public int GradientAngle { get; set; } = 90;
+    /// <summary>0..100: how strong the gradient (or glass highlight) is; 0 = none.</summary>
+    public int GradientStrength { get; set; } = 100;
     /// <summary>Dark shadow under each glyph (helps on bright wallpapers without a background).</summary>
     public bool TextShadow { get; set; } = false;
 }

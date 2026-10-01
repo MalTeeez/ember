@@ -86,7 +86,8 @@ internal static class Backdrop
         Gdip.GdipSetSmoothingMode(g, Gdip.SmoothingModeAntiAlias);
         float r = bg.CornerRadius * scale;
         var c1 = Rgb.Parse(bg.Color, Palette.Background);
-        var c2 = Rgb.Parse(bg.Color2, Palette.Background);
+        // Gradient strength: 0 % = no gradient (second colour = first colour, no glass highlight).
+        var c2 = Rgb.Lerp(c1, Rgb.Parse(bg.Color2, Palette.Background), Math.Clamp(bg.GradientStrength, 0, 100) / 100.0);
         byte a = (byte)Math.Clamp(bg.Opacity * 255 / 100, 0, 255);
         switch (bg.Kind)
         {
@@ -96,8 +97,7 @@ internal static class Backdrop
                 break;
             case "gradient":
             {
-                var rect = new RectF(0, 0, w, h);
-                Gdip.GdipCreateLineBrushFromRectWithAngle(ref rect, c1.ToArgb(a), c2.ToArgb(a), bg.GradientAngle, 1, Gdip.WrapModeTileFlipXY, out var brush);
+                var brush = Gdip.AngleBrush(0, 0, w, h, bg.GradientAngle, c1.ToArgb(a), c2.ToArgb(a));
                 var path = Gdip.RoundRect(0, 0, w, h, r);
                 Gdip.GdipFillPath(g, brush, path);
                 Gdip.GdipDeletePath(path);
@@ -113,10 +113,13 @@ internal static class Backdrop
             case "glass":
             {
                 Gdip.FillRoundRect(g, c1.ToArgb(a), 0, 0, w, h, r);
-                // Soft highlight from the top (second colour), fading out by the middle.
-                var rect = new RectF(0, 0, w, h * 0.55f);
-                Gdip.GdipCreateLineBrushFromRectWithAngle(ref rect, c2.ToArgb((byte)Math.Min(255, 40 + a / 6)), c2.ToArgb(0), 90, 1, Gdip.WrapModeTileFlipXY, out var brush);
-                var path = Gdip.RoundRect(0, 0, w, h * 0.55f, r);
+                if (bg.GradientStrength <= 0) break;
+                // Soft highlight of the second colour along the gradient angle (90° = from the top),
+                // fading out to the other side; inside the rounded shape.
+                byte ha = (byte)Math.Min(255, (40 + a / 6) * Math.Clamp(bg.GradientStrength, 0, 100) / 100);
+                var hi = Rgb.Parse(bg.Color2, Palette.Background);
+                var brush = Gdip.AngleBrush(0, 0, w, h, bg.GradientAngle, hi.ToArgb(ha), hi.ToArgb(0));
+                var path = Gdip.RoundRect(0, 0, w, h, r);
                 Gdip.GdipFillPath(g, brush, path);
                 Gdip.GdipDeletePath(path);
                 Gdip.GdipDeleteBrush(brush);

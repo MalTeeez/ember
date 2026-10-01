@@ -21,13 +21,13 @@
     },
     {
       "Kind": "item",
-      "Id": "cpu.throttle",
+      "Id": "cpu.top",
       "Enabled": true,
       "Collapse": true
     },
     {
       "Kind": "item",
-      "Id": "cpu.top",
+      "Id": "cpu.throttle",
       "Enabled": true,
       "Collapse": true
     },
@@ -129,13 +129,13 @@
     },
     {
       "Kind": "item",
-      "Id": "mem.pagein",
+      "Id": "mem.top",
       "Enabled": true,
       "Collapse": true
     },
     {
       "Kind": "item",
-      "Id": "mem.top",
+      "Id": "mem.pagein",
       "Enabled": true,
       "Collapse": true
     },
@@ -161,13 +161,13 @@
     },
     {
       "Kind": "item",
-      "Id": "disk.free",
+      "Id": "disk.top",
       "Enabled": true,
       "Collapse": true
     },
     {
       "Kind": "item",
-      "Id": "disk.top",
+      "Id": "disk.free",
       "Enabled": true,
       "Collapse": true
     },

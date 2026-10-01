@@ -48,6 +48,7 @@
     "BorderOpacity": 18,
     "Padding": 10,
     "GradientAngle": 90,
+    "GradientStrength": 100,
     "TextShadow": false
   },
   "RowStripes": false,

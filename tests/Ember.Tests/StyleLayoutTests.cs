@@ -717,6 +717,7 @@ public class V6Tests
         var cfg = new EmberSettings();
         cfg.Entries.First(e => e.Id == "net.quality").Enabled = true;
         cfg.Network.PingAlways = true;
+        cfg.Network.ShowGatewayPing = true;
         var c = new StatusComposer();
         var lines = c.Compose(new Snapshot
         {
@@ -742,9 +743,58 @@ public class V6Tests
     }
 
     [Fact]
-    public void CpuTemperature_ShownAlwaysByDefault()
+    public void CpuTemperature_WhenHot_ElseWiderGraph()
     {
-        var lines = new StatusComposer().Compose(new Snapshot { Time = new DateTime(2026, 10, 1, 12, 0, 0), Cpu = new CpuData { Load = 5, Temp = 48 } }, new EmberSettings());
-        Assert.StartsWith("cpu   48°", lines.First(l => l.Text.StartsWith("cpu")).Text);
+        var snap = new Snapshot { Time = new DateTime(2026, 10, 1, 12, 0, 0), Cpu = new CpuData { Load = 5, Temp = 48 } };
+        var normal = new StatusComposer().Compose(snap, new EmberSettings()).First(l => l.Text.StartsWith("cpu")).Text;
+        Assert.DoesNotContain("°", normal);
+        Assert.InRange(normal[5], '\u2800', '\u28FF'); // graph right after the label
+        var cfg = new EmberSettings();
+        cfg.Fields.CpuTempAlways = true;
+        Assert.StartsWith("cpu   48°", new StatusComposer().Compose(snap, cfg).First(l => l.Text.StartsWith("cpu")).Text);
+    }
+
+    [Fact]
+    public void Traceroute_CollapsesSilentHops()
+    {
+        var hops = new List<Ember.Core.Net.TraceHop> { new(1, "192.168.1.1", 1), new(2, null, null), new(3, null, null), new(4, "10.0.0.1", 9), new(5, "1.1.1.1", 12) };
+        var c = Ember.Core.Net.Traceroute.Collapse(hops, "1.1.1.1");
+        Assert.Equal(new[] { 1, 4, 5 }, c.Select(x => x.Hop.Ttl));
+        Assert.Equal(2, c[1].Skipped);
+        var cfg = new EmberSettings();
+        cfg.Entries.First(e => e.Id == "net.quality").Enabled = true;
+        cfg.Network.PingAlways = cfg.Network.ShowTraceroute = true;
+        var lines = new StatusComposer().Compose(new Snapshot { Time = new DateTime(2026, 10, 1, 12, 0, 0), Quality = new Ember.Core.Net.NetQuality(0, 0, 1, 12, true, "192.168.1.1", "1.1.1.1") { Hops = hops } }, cfg);
+        Assert.Contains(lines, l => l.Text.StartsWith("  └ * 4  10.0.0.1"));
+    }
+
+    [Fact]
+    public void Layout_V3_MovesTopProcessesAndKeptSpace()
+    {
+        var entries = LayoutPreset.Default().Entries;
+        int top = entries.FindIndex(e => e.Id == "mem.top"), pf = entries.FindIndex(e => e.Id == "mem.pagein");
+        Assert.True(top < pf);
+        var old = new EmberSettings();
+        old.Entries.Remove(old.Entries.First(e => e.Id == "mem.top"));
+        old.Entries.Add(LayoutEntry.Item("mem.top"));
+        old.LayoutVersion = 2;
+        old.Layout.KeptSpace = "bottom";
+        var s = SettingsStore.Parse(SettingsStore.Serialize(old));
+        Assert.Equal("section", s.Layout.KeptSpace);
+        Assert.True(s.Entries.FindIndex(e => e.Id == "mem.top") < s.Entries.FindIndex(e => e.Id == "mem.pagein"));
+    }
+
+    [Fact]
+    public void DeviceNames_BrandAndKind()
+    {
+        var list = new List<Ember.Core.Devices.DeviceBattery>
+        {
+            new("DeathAdder V3 HyperSpeed", 90, null, "razer"),
+            new("WH-1000XM5 noise cancelling", 50, null, "bluetooth"),
+            new("Logitech MX Master 3S for Business", 70, null, "bluetooth"),
+            new("Logitech MX Anywhere 3 for Business", 70, null, "bluetooth"),
+        };
+        var n = Ember.Core.Devices.DeviceNames.Display(list, 16);
+        Assert.Equal(new[] { "Razer mouse", "Sony headset", "Logitech mouse 1", "Logitech mouse 2" }, n);
     }
 }

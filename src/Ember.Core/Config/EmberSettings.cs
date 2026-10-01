@@ -23,8 +23,8 @@ public sealed class FieldSettings
 {
     public bool CpuTemp { get; set; } = true;
     public bool CpuClock { get; set; } = true;
-    /// <summary>CPU temperature on the cpu line always (else only when it crosses its warning value).</summary>
-    public bool CpuTempAlways { get; set; } = true;
+    /// <summary>CPU temperature on the cpu line always (else only when it crosses its warning value; the graph is wider then).</summary>
+    public bool CpuTempAlways { get; set; } = false;
     /// <summary>Temperature and clock on hot-core lines.</summary>
     public bool CoreDetails { get; set; } = true;
     public bool GpuTemp { get; set; } = true;
@@ -98,6 +98,10 @@ public sealed class NetworkSettings
     public bool ShowPingHost { get; set; } = true;
     /// <summary>Show the ping lines always (coloured by the thresholds), not only when slow.</summary>
     public bool PingAlways { get; set; } = false;
+    /// <summary>Also a ping line for the local gateway (router).</summary>
+    public bool ShowGatewayPing { get; set; } = false;
+    /// <summary>Hops to the internet host under its ping line (traceroute every 30 s).</summary>
+    public bool ShowTraceroute { get; set; } = false;
 }
 
 public enum Corner { TopLeft, TopRight, BottomLeft, BottomRight }
@@ -160,9 +164,14 @@ public sealed class EmberSettings
     public void Normalize()
     {
         Fields ??= new(); Theme ??= new(); Theme.Background ??= new(); Theme.GraphStops ??= new();
+        Layout ??= new();
         Entries = LayoutPreset.Normalize(Entries, addMissingAsDefault: true);
         if (LayoutVersion < LayoutPreset.CurrentVersion)
         {
+            // Version 3: "bottom" was the default before "section" existed.
+            if (LayoutVersion < 3 && Layout.KeptSpace == "bottom") Layout.KeptSpace = "section";
+            // Version 3: the temperature shows when hot; the graph uses its place otherwise.
+            if (LayoutVersion < 3) Fields.CpuTempAlways = false;
             LayoutPreset.Migrate(Entries, LayoutVersion);
             LayoutVersion = LayoutPreset.CurrentVersion;
         }

@@ -23,8 +23,15 @@ internal sealed class PingMonitor : IDisposable
 
     public PingMonitor() => _timer = new Timer(_ => _ = TickAsync(), null, Timeout.Infinite, Timeout.Infinite);
 
-    public void Configure(bool enabled, string host)
+    private volatile bool _trace;
+    private DateTime _traceTime = DateTime.MinValue;
+    private IReadOnlyList<TraceHop>? _hops;
+    private const int MaxHops = 20;
+
+    public void Configure(bool enabled, string host, bool trace = false)
     {
+        _trace = trace;
+        if (!trace) _hops = null;
         if (host != _host)
         {
             _host = host;
@@ -61,7 +68,7 @@ internal sealed class PingMonitor : IDisposable
         {
             if (_net.Count < 3 && _gw.Count < 3) return null;
             return new NetQuality(_gw.LossPercent, _net.LossPercent, _gw.MedianLatency(5), _net.MedianLatency(5), _gateway != null && _gw.Count > 0,
-                _gateway?.ToString() ?? "", _host);
+                _gateway?.ToString() ?? "", _host) { Hops = _trace ? _hops : null };
         }
     }
 
@@ -81,6 +88,11 @@ internal sealed class PingMonitor : IDisposable
             var gwTask = _gateway != null ? PingOnce(_gateway.ToString()) : Task.FromResult<double?>(null);
             var netTask = PingOnce(_host);
             await Task.WhenAll(gwTask, netTask).ConfigureAwait(false);
+            if (_trace && DateTime.UtcNow - _traceTime > TimeSpan.FromSeconds(30))
+            {
+                _traceTime = DateTime.UtcNow;
+                _hops = await TraceAsync(_host).ConfigureAwait(false);
+            }
             lock (_gate)
             {
                 if (_gateway != null) _gw.Add(gwTask.Result);
@@ -104,6 +116,40 @@ internal sealed class PingMonitor : IDisposable
         }
         catch (PingException) { return null; }
         catch (SocketException) { return null; }
+    }
+
+    /// <summary>
+    /// Traceroute: one echo request for each TTL 1..20 at the same time; a hop answers with "TTL expired"
+    /// (its address), the target with success. Hops after the target are dropped.
+    /// </summary>
+    private static async Task<IReadOnlyList<TraceHop>> TraceAsync(string host)
+    {
+        var tasks = Enumerable.Range(1, MaxHops).Select(async ttl =>
+        {
+            try
+            {
+                using var p = new Ping();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var r = await p.SendPingAsync(host, TimeoutMs, new byte[32], new PingOptions(ttl, true)).ConfigureAwait(false);
+                bool ok = r.Status is IPStatus.Success or IPStatus.TtlExpired or IPStatus.TimeExceeded;
+                // The round trip of a "TTL expired" answer is not always set: measure it.
+                double ms = r.Status == IPStatus.Success && r.RoundtripTime > 0 ? r.RoundtripTime : sw.Elapsed.TotalMilliseconds;
+                return new TraceHop(ttl, ok ? r.Address?.ToString() : null, ok ? ms : null);
+            }
+            catch (PingException) { return new TraceHop(ttl, null, null); }
+            catch (SocketException) { return new TraceHop(ttl, null, null); }
+        }).ToList();
+        var hops = await Task.WhenAll(tasks).ConfigureAwait(false);
+        string? target = null;
+        try { target = (await Dns.GetHostAddressesAsync(host).ConfigureAwait(false)).FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork)?.ToString(); }
+        catch (SocketException) { }
+        var list = new List<TraceHop>();
+        foreach (var h in hops)
+        {
+            list.Add(h);
+            if (h.Address != null && (h.Address == target || h.Address == host)) break;
+        }
+        return list;
     }
 
     /// <summary>IPv4 default gateway of the first active physical interface.</summary>

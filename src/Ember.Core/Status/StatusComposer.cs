@@ -369,15 +369,16 @@ public sealed class StatusComposer
         double load = Math.Clamp(cpu.Load, 0, 100);
         var h = Hist("cpu");
         h.Add(load);
-        bool tempVis = f.CpuTemp && cpu.Temp is { } temp0 && (Vis("cpu.temp", t.CpuTemp.Crossed(temp0)) | f.CpuTempAlways);
+        bool tempVis = f.CpuTemp && cpu.Temp is { } temp0 && (Vis("cpu.temp", Above("cpu.temp", temp0, t.CpuTemp.Warn, 3)) | f.CpuTempAlways);
 
         if (On("cpu.load"))
         {
-            // "cpu   83° ⣀⣠⣴⣶⣿…  45% 4.8GHz" — temperature, graph, load, clock.
+            // "cpu   83° ⣀⣠⣴⣶⣿…  45% 4.8GHz" — temperature, graph, load, clock. Without a shown
+            // temperature (unknown, or only shown when hot) the graph takes its place.
             var b = Label("cpu", _c.Cpu);
-            if (f.CpuTemp)
+            if (tempVis)
             {
-                if (tempVis) Val(b, Format.Temp4(cpu.Temp!.Value), _c.Severity(cpu.Temp.Value, t.CpuTemp.Warn, t.CpuTemp.Crit));
+                Val(b, Format.Temp4(cpu.Temp!.Value), _c.Severity(cpu.Temp.Value, t.CpuTemp.Warn, t.CpuTemp.Crit));
                 b.PadTo(Layout.F2);
             }
             int right = Layout.FieldWidth + 1 + (f.CpuClock ? 7 : 0);
@@ -565,9 +566,36 @@ public sealed class StatusComposer
                 lines.Add(b.Build());
             }
             bool always = _cfg.Network.PingAlways;
-            if (q.GatewayMs is { } gms && (Vis("net.gwping", t.GatewayLatency.Crossed(gms)) | always)) lines.Add(PingLine("lan", q.GatewayHost, gms, t.GatewayLatency));
-            if (q.InternetMs is { } ims && (Vis("net.netping", t.InternetLatency.Crossed(ims)) | always)) lines.Add(PingLine("net", q.InternetHost, ims, t.InternetLatency));
+            if (_cfg.Network.ShowGatewayPing && q.GatewayMs is { } gms && (Vis("net.gwping", t.GatewayLatency.Crossed(gms)) | always))
+                lines.Add(PingLine("lan", q.GatewayHost, gms, t.GatewayLatency));
+            if (q.InternetMs is { } ims && (Vis("net.netping", t.InternetLatency.Crossed(ims)) | always))
+            {
+                lines.Add(PingLine("net", q.InternetHost, ims, t.InternetLatency));
+                if (_cfg.Network.ShowTraceroute && q.Hops is { Count: > 0 } hops) lines.AddRange(HopLines(hops, q.InternetHost, t.InternetLatency));
+            }
             items["net.quality"] = lines;
+        }
+    }
+
+    /// <summary>
+    /// Traceroute hops: "  └  1  192.168.1.1     2 ms"; hops without an answer are left out and the next
+    /// answering hop gets a "*" ("  └ *4  10.12.0.1    11 ms").
+    /// </summary>
+    private IEnumerable<Line> HopLines(IReadOnlyList<TraceHop> hops, string target, Threshold th)
+    {
+        foreach (var (hop, skipped) in Traceroute.Collapse(hops, target))
+        {
+            var b = new LineBuilder();
+            b.Add("  └ ", _c.Dim).Add(skipped > 0 ? "*" : " ", _c.Warn)
+             .Add(hop.Ttl.ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(2), _c.Unit).Add("  ", _c.Dim);
+            string ms = hop.Ms is { } v ? Format.Num4(v) + " ms" : "";
+            b.Add(Format.FitDots(hop.Address ?? "?", Layout.Width - b.Column - ms.Length - 1), _c.Label);
+            if (hop.Ms is { } m)
+            {
+                b.Add(" ", _c.Dim);
+                Val(b, Format.Num4(m), _c.Severity(m, th.Warn, th.Crit)).Add(" ms", _c.Unit);
+            }
+            yield return b.Build();
         }
     }
 
@@ -614,20 +642,22 @@ public sealed class StatusComposer
             if (g.Load is { } gl) Hist(key).Add(Math.Clamp(gl, 0, 100));
 
             bool loadVis = g.Load is { } l && Vis(key + ".load", Above(key + ".load", l, t.GpuLoad, Math.Min(5, t.GpuLoad / 2)));
-            bool tempVis = _cfg.Fields.GpuTemp && g.Temp is { } tc && Vis(key + ".temp", t.GpuTemp.Crossed(tc));
+            bool tempVis = _cfg.Fields.GpuTemp && g.Temp is { } tc && Vis(key + ".temp", Above(key + ".temp", tc, t.GpuTemp.Warn, 3));
             if (On("gpu.load") && (loadVis || tempVis))
             {
-                // "4090  95%  72° ⣀⣠⣴⣶⣿…"
+                // "4090  72° ⣀⣠⣴⣶⣿…  95%" — temperature (when shown), graph, load (like the cpu line).
                 var b = Label(labels[i], _c.Gpu);
-                if (loadVis) Val(b, Format.Pct4(g.Load!.Value));
-                int col = Layout.F2;
-                if (_cfg.Fields.GpuTemp)
+                if (tempVis)
                 {
-                    b.PadTo(col);
-                    if (tempVis) Val(b, Format.Temp4(g.Temp!.Value), _c.Severity(g.Temp.Value, t.GpuTemp.Warn, t.GpuTemp.Crit));
-                    col += Layout.FieldWidth + 1;
+                    Val(b, Format.Temp4(g.Temp!.Value), _c.Severity(g.Temp.Value, t.GpuTemp.Warn, t.GpuTemp.Crit));
+                    b.PadTo(Layout.F2);
                 }
-                if (loadVis) Graph(b, Hist(key).Values, 100, _c.Gpu, col);
+                if (loadVis)
+                {
+                    Graph(b, Hist(key).Values, 100, _c.Gpu, b.Column, Layout.Width - Layout.FieldWidth - 1 - b.Column);
+                    b.Add(" ", _c.Dim);
+                    Val(b, Format.Pct4(g.Load!.Value));
+                }
                 loadLines.Add(b.Build());
             }
 
@@ -734,9 +764,12 @@ public sealed class StatusComposer
 
         if (On("mem.top"))
         {
-            Needs.TopMem = any || pending || _preview;
-            var p = Sticky("mem", any ? s.TopMem : null);
-            if (any && p != null) items["mem.top"] = new() { ProcessLine(p) };
+            // The top memory process belongs to the RAM/commit lines, not to paging (paging lists its own processes).
+            bool usage = items.ContainsKey("mem.avail") || items.ContainsKey("mem.commit");
+            bool usagePending = _vis.IsPending("mem.avail") || _vis.IsPending("mem.commit");
+            Needs.TopMem = usage || usagePending || _preview;
+            var p = Sticky("mem", usage ? s.TopMem : null);
+            if (usage && p != null) items["mem.top"] = new() { ProcessLine(p) };
         }
     }
 
@@ -918,17 +951,20 @@ public sealed class StatusComposer
         if (!On("devices.battery") || s.Batteries is not { Count: > 0 } list) return;
         var th = _cfg.Thresholds.Battery;
         var lines = new List<Line>();
-        foreach (var d in list)
+        const int nameWidth = 16;
+        var names = Devices.DeviceNames.Display(list, nameWidth);
+        for (int i = 0; i < list.Count; i++)
         {
+            var d = list[i];
             bool low = th.Crossed(d.Percent);
             if (!_cfg.Fields.BatteryAlways && !Vis("bat." + d.Name, low)) continue;
+            // "Razer mouse      ▮▮▮▮▮▮▯▯ ▭ 91%" — name (brand and kind when too long), bar, battery icon, %.
             var c = _c.Severity(d.Percent, th.Warn, th.Crit);
             var b = new LineBuilder();
-            string name = d.Charging == true ? Format.Fit(d.Name, 14).TrimEnd().PadRight(14) + " +" : Format.Fit(d.Name, 16);
-            b.Add(name.Length > 16 ? name[..16] : name.PadRight(16), _c.Device).Add(" ", _c.Dim);
-            var (bar, filled) = Glyphs.StyledBar(d.Percent / 100.0, 10, _c.Theme.BarStyle);
-            for (int i = 0; i < bar.Length; i++) b.Add(bar[i].ToString(), i < filled ? c : _c.Dim, RunStyle.None, BarBack);
-            b.Add(" ", _c.Dim);
+            b.Add(Format.FitDots(names[i], nameWidth), _c.Device).Add(" ", _c.Dim);
+            var (bar, filled) = Glyphs.StyledBar(d.Percent / 100.0, 8, _c.Theme.BarStyle);
+            for (int k = 0; k < bar.Length; k++) b.Add(bar[k].ToString(), k < filled ? c : _c.Dim, RunStyle.None, BarBack);
+            b.Add(" ", _c.Dim).Icon(d.Charging == true ? Icons.BatteryCharging : Icons.Battery, d.Charging == true ? _c.Warn : c);
             Val(b, Format.Pct4(d.Percent), c);
             lines.Add(b.Build());
         }

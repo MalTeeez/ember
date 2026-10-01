@@ -87,6 +87,25 @@ internal static class Gdip
     [DllImport(Dll)] public static extern int GdipSetPenLineJoin(IntPtr pen, int join);
     public const int FillModeWinding = 1, LineJoinRound = 2;
     [DllImport(Dll)] public static extern int GdipDrawLine(IntPtr graphics, IntPtr pen, float x1, float y1, float x2, float y2);
+    [StructLayout(LayoutKind.Sequential)] public struct PointF { public float X, Y; public PointF(float x, float y) { X = x; Y = y; } }
+    [DllImport(Dll)] public static extern int GdipCreateLineBrush(ref PointF p1, ref PointF p2, uint color1, uint color2, int wrapMode, out IntPtr brush);
+
+    /// <summary>
+    /// Linear gradient over the rectangle along the angle (0° = left → right, 90° = top → bottom),
+    /// from edge to edge whatever the shape of the rectangle.
+    /// </summary>
+    public static IntPtr AngleBrush(float x, float y, float w, float h, float angle, uint c1, uint c2)
+    {
+        double rad = angle * Math.PI / 180;
+        float dx = (float)Math.Cos(rad), dy = (float)Math.Sin(rad);
+        float ext = Math.Abs(w * dx) / 2 + Math.Abs(h * dy) / 2 + 0.5f;
+        float cx = x + w / 2, cy = y + h / 2;
+        var p1 = new PointF(cx - dx * ext, cy - dy * ext);
+        var p2 = new PointF(cx + dx * ext, cy + dy * ext);
+        GdipCreateLineBrush(ref p1, ref p2, c1, c2, WrapModeTileFlipXY, out var brush);
+        return brush;
+    }
+
     [DllImport(Dll)] public static extern int GdipCreateLineBrushFromRectWithAngle(ref RectF rect, uint color1, uint color2, float angle, int isAngleScalable, int wrapMode, out IntPtr brush);
     [DllImport(Dll)] public static extern int GdipSetClipRect(IntPtr graphics, float x, float y, float w, float h, int combineMode);
     [DllImport(Dll)] public static extern int GdipResetClip(IntPtr graphics);

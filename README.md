@@ -4,7 +4,7 @@ A small, text-only desktop widget for Windows. It stays quiet and shows only rel
 
 ```
 +  ▤                          ×      ← toolbar: new note, minimized notes, hide (drag here to move)
-cpu   83° ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤  25% 3.6GHz     ← temperature, load graph, load, clock
+cpu   83° ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤  25% 3.6GHz     ← temperature (when hot), load graph, load, clock
  c0  ⣠⣤⣤  24% 79° c3  ⣶⣾⣿  89% 63°    ← hot cores, aligned right (1, 2 or 3 columns)
   └ game.exe          27% i ▣ ✕      ← details, file properties, end process
 
@@ -13,7 +13,7 @@ cpu   83° ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤  25% 3.6GHz     ← temperature, load 
 ↑ 6.6M ⣶⣶⣦⣤⣤⣾⣷⣄⣠⣾⣿⣦⣠⣴⣶ 3.2k pkt
 
 ── gpu ─────────────────────────
-4090  77%  85° ⣶⣿⣷⣦⣄⣤⣶⣿⣷⣦⣄⣤⣶⣿⣷⣦⣄
+4090  85° ⣶⣿⣷⣦⣄⣤⣶⣿⣷⣦⣄⣤⣶⣿⣷⣦  77%
 
 ── claude ──────────────────────
 5h      :::::::::::::::::::  42%
@@ -21,6 +21,19 @@ cpu   83° ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤  25% 3.6GHz     ← temperature, load 
 week    :::::::::::::::::::  71%
  ↻  2d22h      ⚠  empty 1d22h early
 ```
+
+Screenshots (themes and options; the last two with "Show everything"):
+
+<p>
+<img src="docs/screenshots/spaced-headers.png" width="250" alt="Spaced upper-case headers">
+<img src="docs/screenshots/header-bands.png" width="250" alt="Header bands on a light background">
+<img src="docs/screenshots/green-bands.png" width="250" alt="Header and process bands">
+</p>
+<p>
+<img src="docs/screenshots/header-icons.png" width="250" alt="Header icons and row stripes">
+<img src="docs/screenshots/everything-blue.png" width="250" alt="All lines shown">
+<img src="docs/screenshots/everything-light.png" width="250" alt="All lines shown, light background with value chips">
+</p>
 
 (Icons are drawn with Segoe Fluent Icons / Segoe MDL2 Assets; above they are shown as text. Colours come from the theme.)
 
@@ -89,16 +102,18 @@ To remove Ember: `.\uninstall.ps1` (as administrator). Settings and notes stay i
 - **Process lines** (`└ name … 27% i ▣ ✕`): **i** details window, **▣** file properties, **✕** end process (asks first). Click the line for details; right-click for more (end process tree, open file location).
 - **CPU line and hot cores:** the cpu line shows temperature (when high), graph, load and clock (with Hz). Hot cores are indented and aligned right; each shows graph and load, plus temperature (1 and 2 columns) and clock (1 column) when known. On AMD (no per-core sensor) a core shows the temperature of its CCD. A core shows when it is a load outlier, above the hot-core load (85 %), or unusually hot (10 °C above the median core, or above the CPU temperature warning). Up to 3 in one column (clock, temperature, graph), up to 6 in two (graph, temperature), up to 9 in three columns (graph; the label colour shows the temperature). More cores: the 9 with the highest score (load plus temperature) show, and one line says how many are hidden and their total use (one full core = 100 %).
 - **Disk and memory lines:** `C:  busy ⣀⣠⣴⣶⣿  98%` with `└ queued: 3 reads, 1 write` under it (drive letter, up to 3 letters for a disk with more partitions, `disk2` without a letter; queued = average read/write requests waiting, rounded), `C:  free  14GB / 500GB ▮▯▯  3%`. Memory lines have no "ram" label: `used    29GB / 32GB ▮▮▮▮▮▯▯  90%`, `commit  35GB / 40GB ▮▮▮▮▮▯▯  87%`, `hard disk paging ⣀⣠⣴ 983/s` (pages read from disk; without hard paging, high soft page faults show as `soft disk paging`), and under it each process with hard page faults: private memory (colour = share of the RAM, full at 25 %) and hard faults/s (colour = share of all hard faults). Up to 5 processes; click one for details.
-- **CPU temperature:** on the cpu line always (option: only when hot). On AMD Ryzen and most systems LibreHardwareMonitor needs admin rights for CPU temperatures: start Ember elevated, or turn on "Start at logon" (the logon task runs with highest privileges). Without them the temperature is empty (0 °C is treated as "not read").
+- **CPU and GPU temperature:** shown when hot (over the warning value; option: always for the CPU); otherwise the graph uses the space. On AMD Ryzen and most systems LibreHardwareMonitor needs admin rights for CPU temperatures: start Ember elevated, or turn on "Start at logon" (the logon task runs with highest privileges). Without them the temperature is empty (0 °C is treated as "not read").
 - **Memory:** `commit` is RAM + page file in use; `pagefile` shows the page file alone (use / size).
-- **Ping lines** show the pinged host (gateway address, internet host); options in Settings → Network: hide the host, show ping always (coloured by the thresholds).
+- **Ping lines** show the pinged host; options in Settings → Network: hide the host, ping always (coloured by the thresholds), ping to the router (off by default), and the route to the internet host (traceroute every 30 s; hops that do not answer are left out and the next answering hop gets `*`).
+- **Devices:** a name longer than the column shows as brand and kind (`Razer mouse`, `Sony headset`, with a number when several match); a battery icon (charging icon while charging) is before the value.
+- **Top processes** show under the lines they belong to: the top memory process under used/commit (not under paging, which lists its own processes), the top disk process under the busy disks, the top CPU process under the cores.
 - **Usage limits** (Claude, Codex, Copilot): 2 lines each: bar and %, then the time to the reset (↻) and the projection (will last / empty … before reset, or "early" when the long text does not fit / no trend yet). All bars have the same length; the label column grows for long labels (week, opus, sonnet, premium). When a source gives no data, its section hides (no empty space) and stays hidden for at least 1 min.
 - **Tray icon** (amber dot): Show widget, New note, restore minimized notes, Edit layout, Show everything, Settings, Open log, Exit.
 - **Edit layout:** the widget gets a dark background and can be dragged anywhere. The position is saved as an offset from a corner of the monitor (Settings → General → Corner).
 - **Show everything** (tray or Settings → General → Debug): every enabled line shows at once, thresholds and delays are ignored, and missing data gets sample values. Use it to choose a theme and layout.
 - **Settings** (tray, or right-click the top row): pages General, Layout, Appearance, Thresholds, Intervals, Network, Notes.
   - **Layout:** the list of lines. Move lines up/down, switch them on/off (double-click), add headers and spacers (blank, rule, dots, dashed, double, or your own text). Load a built-in layout (default, compact, everything) or import/export JSON.
-  - **Appearance:** theme preset (ember, btop, mono, nord, dusk, glass, gruvbox, dracula, tokyo-night, catppuccin, latte, solarized, everforest, rose-pine, kanagawa, monokai, one-dark, matrix, synthwave, paper), background (none, solid, gradient, acrylic, blur, panel, glass), colours (colour picker), opacity, corner radius, padding, border, text shadow, header style (rule, spaced, plain, bracket, dots, fade), header alignment (left, center, right), indent and icons, row backgrounds (stripes, header bands, process bands, graph and bar tracks, chips behind warning values, strength), bar style (colons, squares, pips, braille, line, shade, blocks), graph colours (intensity like btop, category, mono). Import/export the theme as JSON.
+  - **Appearance:** theme preset (ember, btop, mono, nord, dusk, glass, gruvbox, dracula, tokyo-night, catppuccin, latte, solarized, everforest, rose-pine, kanagawa, monokai, one-dark, matrix, synthwave, paper), background (none, solid, gradient, acrylic, blur, panel, glass; gradient angle and strength, 0 = no gradient), colours (colour picker), opacity, corner radius, padding, border, text shadow, header style (rule, spaced, plain, bracket, dots, fade), header alignment (left, center, right), indent and icons, row backgrounds (stripes, header bands, process bands, graph and bar tracks, chips behind warning values, strength), bar style (colons, squares, pips, braille, line, shade, blocks), graph colours (intensity like btop, category, mono). Import/export the theme as JSON.
   - **General → Size:** font size slider and text opacity.
   - Changes apply at once. File: `%APPDATA%\Ember\settings.json` (General → Open settings file). Example presets are in [presets/](presets/).
 - **Notes:** tray → New note, toolbar **+**, or the hotkey (default **Ctrl+Alt+N**). Drag the top bar to move, an edge to resize. The top bar has the note colour and no title; only its buttons show it: minimize (to the widget toolbar) and delete (no confirmation). Note opacity: Settings → Notes (separate from the widget). A `>` quote is italic; `>>` and deeper are also indented. Markdown is styled as you type, markers stay dim: `#`/`##`/`###` headings (larger text), `**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, fenced code blocks (```` ``` ```` or `~~~`), `>` and `>>` quotes (indented), `-` / `1.` lists, `- [ ]` checkboxes (click to tick), links `[text](url)` and bare URLs (Ctrl+click opens), `---` rules. Saved 1 s after each change to `%APPDATA%\Ember\notes\<id>.md`.

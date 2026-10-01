@@ -1,7 +1,11 @@
 namespace Ember.Core.Devices;
 
 /// <summary>Battery of a connected device (Bluetooth or a Razer 2.4 GHz receiver).</summary>
-public sealed record DeviceBattery(string Name, double Percent, bool? Charging, string Source);
+public sealed record DeviceBattery(string Name, double Percent, bool? Charging, string Source)
+{
+    /// <summary>Maker ("Razer", "Sony"), from the full name or the source; empty if unknown.</summary>
+    public string Brand { get; init; } = "";
+}
 
 /// <summary>
 /// Razer HID protocol (as used by Razer Synapse and OpenRazer): a 90-byte feature report.
@@ -86,6 +90,65 @@ public static class DeviceNames
     /// <summary>One entry per device name: the lowest battery wins (a headset can report through several services).</summary>
     public static List<DeviceBattery> Merge(IEnumerable<DeviceBattery> all)
         => all.GroupBy(b => Short(b.Name), StringComparer.OrdinalIgnoreCase)
-              .Select(g => g.OrderBy(b => b.Percent).First() with { Name = g.Key })
+              .Select(g =>
+              {
+                  var b = g.OrderBy(x => x.Percent).First();
+                  return b with { Name = g.Key, Brand = b.Brand.Length > 0 ? b.Brand : Brand(b.Name, b.Source) };
+              })
               .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    private static readonly string[] Brands =
+    {
+        "Razer", "Logitech", "Sony", "Apple", "Samsung", "Bose", "JBL", "SteelSeries", "Corsair", "HyperX", "Microsoft", "Xbox",
+        "Jabra", "Sennheiser", "Beats", "Google", "Nothing", "Anker", "Soundcore", "Asus", "ROG", "Glorious", "Keychron", "Nintendo", "8BitDo",
+    };
+
+    /// <summary>Maker from a known brand word in the name, or from the source (Razer receivers).</summary>
+    public static string Brand(string name, string source)
+    {
+        foreach (var w in name.Split(' ', '-', '(', ')'))
+        {
+            var b = Brands.FirstOrDefault(x => x.Equals(w, StringComparison.OrdinalIgnoreCase));
+            if (b != null) return b;
+        }
+        if (name.StartsWith("WH-", StringComparison.OrdinalIgnoreCase) || name.StartsWith("WF-", StringComparison.OrdinalIgnoreCase)) return "Sony";
+        if (name.StartsWith("AirPods", StringComparison.OrdinalIgnoreCase)) return "Apple";
+        if (name.StartsWith("Galaxy", StringComparison.OrdinalIgnoreCase)) return "Samsung";
+        if (name.StartsWith("MX ", StringComparison.OrdinalIgnoreCase) || name.StartsWith("G", StringComparison.Ordinal) && name.Length > 1 && char.IsDigit(name[1])) return "Logitech";
+        return source == "razer" ? "Razer" : "";
+    }
+
+    /// <summary>Kind of device from its name: mouse, keyboard, headset, earbuds, controller, speaker, pen, device.</summary>
+    public static string Kind(string name)
+    {
+        string n = name.ToLowerInvariant();
+        bool Any(params string[] words) => words.Any(w => n.Contains(w, StringComparison.Ordinal));
+        if (Any("mouse", "deathadder", "viper", "basilisk", "naga", "orochi", "pro click", "mx master", "mx anywhere", "g502", "g305", "g703", "g903", "superlight", "rival", "aerox", "prime", "model o", "model d", "dark core", "harpoon", "ironclaw")) return "mouse";
+        if (Any("keyboard", "keys", "blackwidow", "huntsman", "ornata", "k70", "k95", "k100", "apex", "mx mechanical", "keychron")) return "keyboard";
+        if (Any("buds", "airpods", "wf-", "earbuds", "pods")) return "earbuds";
+        if (Any("headset", "headphone", "wh-", "kraken", "blackshark", "barracuda", "nari", "arctis", "cloud", "quietcomfort", "qc", "momentum", "g pro x", "g733", "virtuoso", "void")) return "headset";
+        if (Any("controller", "gamepad", "dualsense", "dualshock", "xbox", "joy-con", "pro controller", "wolverine")) return "controller";
+        if (Any("speaker", "flip", "charge", "boom", "soundlink")) return "speaker";
+        if (Any("pen", "stylus", "pencil")) return "pen";
+        return "device";
+    }
+
+    /// <summary>"Razer mouse" (brand and kind) for names that are too long; a number when several are the same.</summary>
+    public static List<string> Display(IReadOnlyList<DeviceBattery> devices, int width)
+    {
+        var names = devices.Select(d =>
+        {
+            if (d.Name.Length <= width) return d.Name;
+            string kind = Kind(d.Name);
+            string brand = d.Brand.Length > 0 ? d.Brand : Brand(d.Name, d.Source);
+            return brand.Length > 0 ? brand + " " + kind : char.ToUpperInvariant(kind[0]) + kind[1..];
+        }).ToList();
+        foreach (var dup in names.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key).ToList())
+        {
+            int k = 1;
+            for (int i = 0; i < names.Count; i++)
+                if (names[i] == dup) names[i] = dup + " " + k++;
+        }
+        return names;
+    }
 }

@@ -146,8 +146,12 @@ public sealed class LayoutPreset
         return list;
     }
 
-    /// <summary>Version 2: the network items have a "net" section header.</summary>
-    public const int CurrentVersion = 2;
+    /// <summary>
+    /// Version 2: the network items have a "net" section header.
+    /// Version 3: top processes directly under the lines they belong to (cpu.top before cpu.throttle,
+    /// mem.top before mem.pagein, disk.top before disk.free).
+    /// </summary>
+    public const int CurrentVersion = 3;
 
     /// <summary>Changes an older layout to the current version (adds new section headers).</summary>
     public static void Migrate(List<LayoutEntry> entries, int fromVersion)
@@ -162,6 +166,23 @@ public sealed class LayoutPreset
             entries.Insert(first, LayoutEntry.Header("net"));
             if (first > 0) entries.Insert(first, LayoutEntry.Spacer());
         }
+        if (fromVersion < 3)
+        {
+            MoveBefore(entries, "cpu.top", "cpu.throttle");
+            MoveBefore(entries, "mem.top", "mem.pagein");
+            MoveBefore(entries, "disk.top", "disk.free");
+        }
+    }
+
+    /// <summary>Moves item <paramref name="id"/> right before <paramref name="before"/> if it is after it.</summary>
+    private static void MoveBefore(List<LayoutEntry> entries, string id, string before)
+    {
+        int i = entries.FindIndex(e => e.Kind == "item" && e.Id == id);
+        int j = entries.FindIndex(e => e.Kind == "item" && e.Id == before);
+        if (i < 0 || j < 0 || i < j) return;
+        var e = entries[i];
+        entries.RemoveAt(i);
+        entries.Insert(j, e);
     }
 
     public static IReadOnlyList<LayoutPreset> BuiltIn { get; } = new[] { Default(), Compact(), Everything() };
@@ -177,15 +198,15 @@ public sealed class LayoutPreset
         Entries = new()
         {
             LayoutEntry.Item("toolbar"),
-            LayoutEntry.Item("cpu.load"), LayoutEntry.Item("cpu.cores"), LayoutEntry.Item("cpu.throttle"), LayoutEntry.Item("cpu.top"),
+            LayoutEntry.Item("cpu.load"), LayoutEntry.Item("cpu.cores"), LayoutEntry.Item("cpu.top"), LayoutEntry.Item("cpu.throttle"),
             LayoutEntry.Spacer(), LayoutEntry.Header("net"),
             LayoutEntry.Item("net.down"), LayoutEntry.Item("net.up"), LayoutEntry.Item("net.adapters"), LayoutEntry.Item("net.quality", false),
             LayoutEntry.Spacer(), LayoutEntry.Header("gpu"),
             LayoutEntry.Item("gpu.load"), LayoutEntry.Item("gpu.vram", false), LayoutEntry.Item("gpu.top"),
             LayoutEntry.Spacer(), LayoutEntry.Header("memory"),
-            LayoutEntry.Item("mem.avail"), LayoutEntry.Item("mem.commit"), LayoutEntry.Item("mem.pagein"), LayoutEntry.Item("mem.top"),
+            LayoutEntry.Item("mem.avail"), LayoutEntry.Item("mem.commit"), LayoutEntry.Item("mem.top"), LayoutEntry.Item("mem.pagein"),
             LayoutEntry.Spacer(), LayoutEntry.Header("disk"),
-            LayoutEntry.Item("disk.busy"), LayoutEntry.Item("disk.free"), LayoutEntry.Item("disk.top"),
+            LayoutEntry.Item("disk.busy"), LayoutEntry.Item("disk.top"), LayoutEntry.Item("disk.free"),
             LayoutEntry.Spacer(), LayoutEntry.Header("claude"),
             LayoutEntry.Item("claude.5h"), LayoutEntry.Item("claude.week"), LayoutEntry.Item("claude.models"),
             LayoutEntry.Spacer(), LayoutEntry.Header("codex"),

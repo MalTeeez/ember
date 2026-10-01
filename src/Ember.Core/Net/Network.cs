@@ -171,4 +171,32 @@ public sealed class PingStats
 }
 
 /// <summary>Network quality summary.</summary>
-public sealed record NetQuality(double GatewayLoss, double InternetLoss, double? GatewayMs, double? InternetMs, bool HasGateway, string GatewayHost = "", string InternetHost = "");
+public sealed record NetQuality(double GatewayLoss, double InternetLoss, double? GatewayMs, double? InternetMs, bool HasGateway, string GatewayHost = "", string InternetHost = "")
+{
+    /// <summary>Last traceroute to the internet host (null when off or not done yet).</summary>
+    public IReadOnlyList<TraceHop>? Hops { get; init; }
+}
+
+/// <summary>One traceroute hop: TTL, the answering address (null = no answer) and the round trip.</summary>
+public sealed record TraceHop(int Ttl, string? Address, double? Ms);
+
+public static class Traceroute
+{
+    /// <summary>
+    /// Hops for display: hops without an answer are left out, and the next answering hop is marked
+    /// (Skipped = how many were left out before it). Ends at the first hop that is the target.
+    /// </summary>
+    public static List<(TraceHop Hop, int Skipped)> Collapse(IReadOnlyList<TraceHop> hops, string target)
+    {
+        var list = new List<(TraceHop, int)>();
+        int skipped = 0;
+        foreach (var h in hops.OrderBy(h => h.Ttl))
+        {
+            if (h.Address == null) { skipped++; continue; }
+            list.Add((h, skipped));
+            skipped = 0;
+            if (h.Address == target) break;
+        }
+        return list;
+    }
+}

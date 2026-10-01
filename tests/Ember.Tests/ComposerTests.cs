@@ -351,7 +351,9 @@ public class ComposerTests
         List<Line> lines = new();
         for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, gpus: gpus), Cfg());
         int h = lines.FindIndex(l => l.Text.StartsWith("\u2500\u2500 gpu"));
-        Assert.StartsWith("4090  64%  71\u00B0 ", lines[h + 1].Text);
+        // Temperature (shown when hot), graph, load at the right.
+        Assert.StartsWith("4090  71\u00B0 ", lines[h + 1].Text);
+        Assert.EndsWith("  64%", lines[h + 1].Text);
         Assert.Equal(7, lines[h + 2].Pid);
     }
 

@@ -50,6 +50,7 @@ public static class Icons
     public const char Drive = '\uEDA2';      // HardDrive: disk
     public const char Robot = '\uE99A';      // usage limits (claude, codex, copilot)
     public const char Battery = '\uE83F';    // devices
+    public const char BatteryCharging = '\uE83E';
     public const char Tag = '\uE8EC';        // other sections
 
     /// <summary>Icon for a section header, by its (lower-case) name.</summary>

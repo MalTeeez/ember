@@ -47,7 +47,7 @@ internal sealed partial class AppHost
         RegisterNoteHotkey(_settings.Notes.NewNoteHotkey);
 
         _ping = new PingMonitor();
-        _ping.Configure(PingOn(_settings), _settings.Network.InternetHost);
+        _ping.Configure(PingOn(_settings), _settings.Network.InternetHost, _settings.Network.ShowTraceroute);
         _claude = new ClaudePoller(Paths.ClaudeCredentials);
         _codex = new CodexPoller();
         _copilot = new CopilotPoller();
@@ -112,7 +112,7 @@ internal sealed partial class AppHost
     {
         ConfigurePollers(s);
         RegisterNoteHotkey(s.Notes.NewNoteHotkey);
-        _ping?.Configure(PingOn(s), s.Network.InternetHost);
+        _ping?.Configure(PingOn(s), s.Network.InternetHost, s.Network.ShowTraceroute);
         string key = NoteThemeKey(s);
         if (key != _noteThemeKey)
         {

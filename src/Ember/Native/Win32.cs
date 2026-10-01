@@ -326,6 +326,12 @@ internal static class W
     [DllImport("user32.dll")] public static extern short GetKeyState(int vk);
     public const int VK_CONTROL = 0x11, VK_LBUTTON = 0x01;
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
+    [DllImport("user32.dll")] public static extern bool HideCaret(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern bool ShowCaret(IntPtr hwnd);
+    public const uint EM_GETSCROLLPOS = 0x0400 + 221, EM_SETSCROLLPOS = 0x0400 + 222;
+    [DllImport("user32.dll")] public static extern IntPtr BeginDeferWindowPos(int count);
+    [DllImport("user32.dll")] public static extern IntPtr DeferWindowPos(IntPtr info, IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] public static extern bool EndDeferWindowPos(IntPtr info);
     [DllImport("user32.dll")] public static extern bool RedrawWindow(IntPtr hwnd, IntPtr rect, IntPtr rgn, uint flags);
     public const uint RDW_INVALIDATE = 0x1, RDW_ERASE = 0x4, RDW_ALLCHILDREN = 0x80, RDW_UPDATENOW = 0x100, RDW_FRAME = 0x400;
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);

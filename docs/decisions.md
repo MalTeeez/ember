@@ -215,3 +215,16 @@ These decisions replace older ones where they conflict (noted in brackets).
 | A12 | **Less blinking** (from the decision log): threshold bands — a visible hot core stays until its load is 15 points below the hot-core load (temperatures 3 °C); GPU top process 15 points; GPU load up to 5 points; soft paging 30 %. A shown top process stays through short gaps in its samples (up to the stick time). "Secure System" is never a top process. | The log showed the same items crossing their thresholds every second. |
 | A13 | **Razer:** an interface that does not open for read/write (Windows owns mouse and keyboard collections: error 5) is opened again without read/write access; feature reports (HidD_SetFeature/GetFeature) work with such a handle. | The log showed the 91-byte control interface of the 00C5 receiver among the ones that did not open. |
 
+## Version 7
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| B1 | **Layout version 3:** saved "bottom" kept space (the old default) becomes "section"; top processes move directly under their lines (cpu.top before cpu.throttle, mem.top before mem.pagein, disk.top before disk.free). | The saved old default kept the empty lines at the bottom. |
+| B2 | **mem.top** shows only with the used/commit lines (its own reason), not because of paging; paging lists the processes that cause it. | Requested: processes only under the parts they belong to. |
+| B3 | **cpu and GPU lines:** the temperature shows when hot (band 3 °C); without it the graph takes its place. GPU load at the right of its graph (like cpu). `CpuTempAlways` is off again (migrated). | Requested wider graphs. |
+| B4 | **Router ping** is an option (off). **Traceroute** option: 20 echo requests with TTL 1..20 at the same time every 30 s; "TTL expired" answers give the hop address (round trip measured); hops without an answer are dropped and the next answering hop is marked `*`; the list ends at the target. | Requested. |
+| B5 | **Gradient:** drawn with a line brush from edge to edge along the angle (0° left → right, 90° top → bottom), also for the glass highlight; strength 0–100 % (0 = no gradient, no highlight). | The angle had no visible effect (GDI+ angle brush on the rectangle; close colours). |
+| B6 | **Device names** longer than the column: brand (known brand words, Sony WH-/WF-, AirPods, MX/G-number = Logitech, Razer source) and kind (mouse, keyboard, headset, earbuds, controller, speaker, pen, device from model words), numbered when equal. Battery icon (charging icon) before the value; bar 8 cells. | Requested. |
+| B7 | **Note editor:** only the changed lines are restyled while typing (whole text for code fences and settings changes); the caret is hidden and the scroll position kept while styling; no background erase on redraw. | Typing flickered and lagged (the whole text was restyled at every key). |
+| B8 | **Settings scrolling** moves the controls with one DeferWindowPos batch and redraws once; WM_SETREDRAW is no longer sent to the top-level window. | WM_SETREDRAW(false) hides a top-level window from hit-testing, so wheel messages went to the windows behind it. |
+

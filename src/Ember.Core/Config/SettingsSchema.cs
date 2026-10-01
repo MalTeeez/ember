@@ -183,6 +183,7 @@ public static class SettingsSchema
         yield return Color(A, "Background", "Background colour", s => s.Theme.Background.Color, (s, v) => s.Theme.Background.Color = v);
         yield return Color(A, "Background", "Second colour (gradient, glass)", s => s.Theme.Background.Color2, (s, v) => s.Theme.Background.Color2 = v);
         yield return Slider(A, "Background", "Background opacity %", 0, 100, s => s.Theme.Background.Opacity, (s, v) => s.Theme.Background.Opacity = (int)v);
+        yield return Slider(A, "Background", "Gradient strength % (0 = none)", 0, 100, s => s.Theme.Background.GradientStrength, (s, v) => s.Theme.Background.GradientStrength = (int)v);
         yield return Slider(A, "Background", "Gradient angle", 0, 360, s => s.Theme.Background.GradientAngle, (s, v) => s.Theme.Background.GradientAngle = (int)v);
         yield return Slider(A, "Background", "Corner radius", 0, 40, s => s.Theme.Background.CornerRadius, (s, v) => s.Theme.Background.CornerRadius = (int)v);
         yield return Slider(A, "Background", "Padding", 0, 40, s => s.Theme.Background.Padding, (s, v) => s.Theme.Background.Padding = (int)v);
@@ -315,6 +316,9 @@ public static class SettingsSchema
             },
         };
         yield return Bool(N, "", "Show the pinged host on ping lines", s => s.Network.ShowPingHost, (s, v) => s.Network.ShowPingHost = v);
+        yield return Bool(N, "", "Show the ping to the router (gateway)", s => s.Network.ShowGatewayPing, (s, v) => s.Network.ShowGatewayPing = v);
+        yield return Bool(N, "", "Show the route to the internet host (traceroute every 30 s)", s => s.Network.ShowTraceroute, (s, v) => s.Network.ShowTraceroute = v,
+            "Hops that do not answer are left out; the next answering hop is marked with *.");
         yield return Bool(N, "", "Show ping always (coloured by the thresholds)", s => s.Network.PingAlways, (s, v) => s.Network.PingAlways = v,
             "Needs the line \"Network quality (ping)\" switched on in Layout.");
 

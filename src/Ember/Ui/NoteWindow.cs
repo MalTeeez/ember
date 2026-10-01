@@ -119,7 +119,7 @@ internal sealed class NoteWindow : Win32Window
         if (_bgBrush != IntPtr.Zero) W.DeleteObject(_bgBrush);
         _bgBrush = W.CreateSolidBrush(Background.ToColorRef());
         W.SendMessage(_edit, W.EM_SETBKGNDCOLOR, IntPtr.Zero, (IntPtr)Background.ToColorRef());
-        Restyle();
+        Restyle(full: true);
         W.InvalidateRect(Handle, IntPtr.Zero, true);
     }
 
@@ -276,18 +276,30 @@ internal sealed class NoteWindow : Win32Window
         return cf;
     }
 
-    /// <summary>Styles all text again. Keeps the selection; no change events while styling.</summary>
-    private void Restyle()
+    private string _styledText = "";
+
+    /// <summary>
+    /// Styles the text again. Only the changed lines are restyled while typing (whole text after a
+    /// settings change, or when a code fence is involved), with drawing and the caret hidden and the
+    /// scroll position kept, so typing does not flicker. Keeps the selection; no change events while styling.
+    /// </summary>
+    private void Restyle(bool full = false)
     {
         if (_edit == IntPtr.Zero || _styling) return;
         _styling = true;
         RichEditOle.SuspendUndo(_textDoc); // styling must not be in Ctrl+Z
+        bool caretHidden = W.HideCaret(_edit);
         try
         {
             string text = ReadText();
             Text = text;
+            var (from, to) = full ? (0, text.Length) : ChangedLines(_styledText, text);
+            _styledText = text;
+            if (from > to) return;
             var mask = W.SendMessage(_edit, W.EM_GETEVENTMASK, IntPtr.Zero, IntPtr.Zero);
             W.SendMessage(_edit, W.EM_SETEVENTMASK, IntPtr.Zero, IntPtr.Zero);
+            var scroll = new POINT();
+            W.SendMessage(_edit, W.EM_GETSCROLLPOS, IntPtr.Zero, ref scroll);
             W.SendMessage(_edit, W.WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
             var sel = new CHARRANGE();
             W.SendMessage(_edit, W.EM_EXGETSEL, IntPtr.Zero, ref sel);
@@ -297,14 +309,16 @@ internal sealed class NoteWindow : Win32Window
             all.szFaceName = string.IsNullOrWhiteSpace(_cfg.Layout.Font) ? "Cascadia Mono" : _cfg.Layout.Font;
             all.yHeight = BaseTwips;
             all.bCharSet = 1; // DEFAULT_CHARSET
-            W.SendMessage(_edit, W.EM_SETCHARFORMAT, (IntPtr)W.SCF_ALL, ref all);
-            var everything = new CHARRANGE { cpMin = 0, cpMax = -1 };
-            W.SendMessage(_edit, W.EM_EXSETSEL, IntPtr.Zero, ref everything);
+            var region = new CHARRANGE { cpMin = from, cpMax = full ? -1 : to };
+            W.SendMessage(_edit, W.EM_EXSETSEL, IntPtr.Zero, ref region);
+            W.SendMessage(_edit, W.EM_SETCHARFORMAT, (IntPtr)W.SCF_SELECTION, ref all);
             SetIndent(0);
 
             foreach (var span in MarkdownStyler.Style(text))
             {
-                var range = new CHARRANGE { cpMin = span.Start, cpMax = span.End };
+                if (span.End < from || span.Start > to) continue;
+                var range = new CHARRANGE { cpMin = Math.Max(span.Start, from), cpMax = Math.Min(span.End, to) };
+                if (range.cpMax <= range.cpMin && span.Length > 0) continue;
                 W.SendMessage(_edit, W.EM_EXSETSEL, IntPtr.Zero, ref range);
                 var cf = Format(span);
                 W.SendMessage(_edit, W.EM_SETCHARFORMAT, (IntPtr)W.SCF_SELECTION, ref cf);
@@ -318,16 +332,39 @@ internal sealed class NoteWindow : Win32Window
             typing.dwMask |= W.CFM_SIZE;
             typing.yHeight = BaseTwips;
             W.SendMessage(_edit, W.EM_SETCHARFORMAT, (IntPtr)W.SCF_SELECTION, ref typing);
+            W.SendMessage(_edit, W.EM_SETSCROLLPOS, IntPtr.Zero, ref scroll);
             W.SendMessage(_edit, W.WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
-            W.InvalidateRect(_edit, IntPtr.Zero, true);
+            W.InvalidateRect(_edit, IntPtr.Zero, false); // no erase: no flash
             W.SendMessage(_edit, W.EM_SETEVENTMASK, IntPtr.Zero, mask);
         }
         finally
         {
+            if (caretHidden) W.ShowCaret(_edit);
             RichEditOle.ResumeUndo(_textDoc);
             _styling = false;
         }
-        W.InvalidateRect(Handle, IntPtr.Zero, false); // title may have changed
+        W.InvalidateRect(Handle, IntPtr.Zero, false);
+    }
+
+    /// <summary>
+    /// The lines that differ between the old and new text: [start of the first changed line, end of the
+    /// last changed line] in the new text. Code fences change the style of everything after them: whole text.
+    /// </summary>
+    internal static (int From, int To) ChangedLines(string old, string now)
+    {
+        int pre = 0, max = Math.Min(old.Length, now.Length);
+        while (pre < max && old[pre] == now[pre]) pre++;
+        int suf = 0;
+        while (suf < max - pre && old[old.Length - 1 - suf] == now[now.Length - 1 - suf]) suf++;
+        if (pre == now.Length && old.Length == now.Length) return (1, 0); // no change
+        int from = pre, to = now.Length - suf;
+        while (from > 0 && now[from - 1] is not ('\r' or '\n')) from--;
+        while (to < now.Length && now[to] is not ('\r' or '\n')) to++;
+        string changedOld = old.Substring(Math.Min(pre, old.Length), Math.Max(0, old.Length - suf - pre));
+        string changedNew = now.Substring(from, to - from);
+        if (changedNew.Contains("```") || changedNew.Contains("~~~") || changedOld.Contains("```") || changedOld.Contains("~~~") || now.Contains("```") && (changedNew.Contains('`') || changedOld.Contains('`')))
+            return (0, now.Length);
+        return (from, to);
     }
 
     private void SetIndent(int twips)

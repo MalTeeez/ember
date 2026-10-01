@@ -453,32 +453,35 @@ internal sealed class SettingsWindow : Win32Window
     }
 
     /// <summary>
-    /// Moves the controls of the page to their base position minus the scroll offset. Drawing is off
-    /// while they move, then the window and all controls are drawn once (no tearing while scrolling).
+    /// Moves the controls of the page to their base position minus the scroll offset, all in one
+    /// DeferWindowPos batch without redraw, then draws the window and its controls once (no tearing).
+    /// (WM_SETREDRAW on the top-level window is not used: it hides the window from hit-testing for a
+    /// moment, so wheel messages went to the windows behind it.)
     /// </summary>
     private void Reposition()
     {
+        var moves = new List<(IntPtr H, int X, int Y)>();
         void Move(IntPtr h, int baseY)
         {
             if (!W.GetWindowRect(h, out var r)) return;
             var p = new POINT(r.Left, r.Top);
             W.ScreenToClient(Handle, ref p);
-            if (p.Y == baseY - _scroll) return;
-            W.SetWindowPos(h, IntPtr.Zero, p.X, baseY - _scroll, 0, 0,
-                W.SWP_NOSIZE | W.SWP_NOZORDER | W.SWP_NOACTIVATE | W.SWP_NOREDRAW | W.SWP_NOCOPYBITS);
+            if (p.Y != baseY - _scroll) moves.Add((h, p.X, baseY - _scroll));
         }
-        W.SendMessage(Handle, W.WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
-        try
-        {
-            foreach (var r in _rows.Where(r => r.Page == _page))
-                foreach (var (h, y) in r.Hwnds) Move(h, y);
-            foreach (var (h, y, p) in _statics.Where(s => s.Page == _page)) Move(h, y);
-        }
-        finally
-        {
-            W.SendMessage(Handle, W.WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
-            W.RedrawWindow(Handle, IntPtr.Zero, IntPtr.Zero, W.RDW_INVALIDATE | W.RDW_ERASE | W.RDW_ALLCHILDREN | W.RDW_UPDATENOW);
-        }
+        foreach (var r in _rows.Where(r => r.Page == _page))
+            foreach (var (h, y) in r.Hwnds) Move(h, y);
+        foreach (var (h, y, p) in _statics.Where(s => s.Page == _page)) Move(h, y);
+        if (moves.Count == 0) return;
+        var dwp = W.BeginDeferWindowPos(moves.Count);
+        foreach (var (h, x, y) in moves)
+            if (dwp != IntPtr.Zero)
+                dwp = W.DeferWindowPos(dwp, h, IntPtr.Zero, x, y, 0, 0,
+                    W.SWP_NOSIZE | W.SWP_NOZORDER | W.SWP_NOACTIVATE | W.SWP_NOREDRAW | W.SWP_NOCOPYBITS);
+        if (dwp != IntPtr.Zero) W.EndDeferWindowPos(dwp);
+        else
+            foreach (var (h, x, y) in moves)
+                W.SetWindowPos(h, IntPtr.Zero, x, y, 0, 0, W.SWP_NOSIZE | W.SWP_NOZORDER | W.SWP_NOACTIVATE | W.SWP_NOREDRAW | W.SWP_NOCOPYBITS);
+        W.RedrawWindow(Handle, IntPtr.Zero, IntPtr.Zero, W.RDW_INVALIDATE | W.RDW_ERASE | W.RDW_ALLCHILDREN | W.RDW_UPDATENOW);
     }
 
     private void UpdateScrollBar()

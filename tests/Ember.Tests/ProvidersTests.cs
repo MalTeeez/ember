@@ -225,7 +225,9 @@ public class ProviderComposeTests
         var lines = new StatusComposer().Compose(s, cfg);
         int h = lines.FindIndex(l => l.Text.StartsWith("── devices"));
         Assert.True(h >= 0);
-        Assert.StartsWith("DeathAdder V3\u2026 + ", lines[h + 1].Text);
+        // Name too long: brand and kind; charging icon before the value.
+        Assert.StartsWith("Razer mouse ", lines[h + 1].Text);
+        Assert.Contains(lines[h + 1].Runs, r => r.Style == RunStyle.Icon && r.Text[0] == Icons.BatteryCharging);
         Assert.EndsWith(" 12%", lines[h + 1].Text);
         Assert.Contains(lines[h + 1].Runs, r => r.Color == Rgb.Parse(cfg.Theme.Crit, Palette.Red));
         Assert.All(lines, l => Assert.Equal(Layout.Width, l.Length));
@@ -233,7 +235,7 @@ public class ProviderComposeTests
         cfg.Fields.BatteryAlways = false;
         cfg.Intervals.ShowDelaySeconds = 0;
         var low = new StatusComposer().Compose(s, cfg);
-        Assert.Contains(low, l => l.Text.StartsWith("DeathAdder"));
+        Assert.Contains(low, l => l.Text.StartsWith("Razer mouse"));
         Assert.DoesNotContain(low, l => l.Text.StartsWith("Buds"));
     }
 
