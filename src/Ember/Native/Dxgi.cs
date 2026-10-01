@@ -34,6 +34,7 @@ internal static unsafe class Dxgi
             var fvt = *(IntPtr**)factory;
             // IDXGIFactory1::EnumAdapters1 = vtable slot 12
             var enumAdapters1 = (delegate* unmanaged[Stdcall]<IntPtr, uint, IntPtr*, int>)fvt[12];
+            byte* desc = stackalloc byte[DescSize];
             for (uint i = 0; i < 16; i++)
             {
                 IntPtr adapter;
@@ -44,9 +45,8 @@ internal static unsafe class Dxgi
                     var avt = *(IntPtr**)adapter;
                     // IDXGIAdapter1::GetDesc1 = vtable slot 10
                     var getDesc1 = (delegate* unmanaged[Stdcall]<IntPtr, byte*, int>)avt[10];
-                    byte* desc = stackalloc byte[DescSize];
                     if (getDesc1(adapter, desc) != 0) continue;
-                    string name = new string((char*)desc).Trim();
+                    string name = new string((char*)desc, 0, 128).Split('\0')[0].Trim();
                     uint vendor = *(uint*)(desc + 256);
                     ulong dedicated = *(ulong*)(desc + 272);
                     uint luidLow = *(uint*)(desc + 296);
