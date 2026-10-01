@@ -32,6 +32,8 @@
   "HeaderAlign": "center",
   "HeaderIndent": 2,
   "HeaderIcons": false,
+  "HeaderTextShadow": true,
+  "ChipRadius": 40,
   "HeaderUpper": false,
   "HeaderBold": true,
   "BoldValues": true,

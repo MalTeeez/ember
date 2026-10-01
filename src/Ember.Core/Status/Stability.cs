@@ -87,21 +87,26 @@ public sealed class StickyTop
 {
     private ProcInfo? _current;
     private int _challenger;
-    private DateTime _challengerSince;
+    private DateTime _challengerSince, _lastSeen;
 
     /// <param name="candidates">Processes sorted by value, highest first (may be null or empty).</param>
     public ProcInfo? Update(IReadOnlyList<ProcInfo>? candidates, DateTime now, TimeSpan stick)
     {
         if (candidates == null || candidates.Count == 0)
         {
+            // A short gap in the samples (the list is only built above a load) keeps the shown process
+            // for up to the stick time, so its line does not blink.
+            if (_current != null && now - _lastSeen < stick) return _current;
             _current = null;
             _challenger = 0;
             return null;
         }
         var best = candidates[0];
         var cur = _current == null ? null : candidates.FirstOrDefault(c => c.Pid == _current.Pid);
+        if (cur != null) _lastSeen = now;
         if (cur == null || best.Pid == cur.Pid)
         {
+            _lastSeen = now;
             _current = best;
             _challenger = 0;
             return _current;

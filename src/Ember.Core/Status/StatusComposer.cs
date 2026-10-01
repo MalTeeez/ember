@@ -90,6 +90,13 @@ public sealed class StatusComposer
 
     private bool On(string id) => _cfg.IsOn(id);
 
+    /// <summary>
+    /// Threshold with a band: a visible item stays until the value falls <paramref name="margin"/> below
+    /// the threshold, so values near the threshold do not make it show and hide again and again.
+    /// </summary>
+    private bool Above(string key, double value, double threshold, double margin)
+        => value >= (_vis.IsVisible(key) ? threshold - margin : threshold);
+
     /// <summary>Show/hide state; in preview mode every condition is true at once.</summary>
     private bool Vis(string key, bool cond) => _preview || _vis.Update(key, cond, _now);
 
@@ -164,10 +171,12 @@ public sealed class StatusComposer
     {
         var entries = _cfg.Entries;
         var hold = _preview ? TimeSpan.Zero : TimeSpan.FromSeconds(_cfg.Layout.HoldSeconds);
-        bool bottom = _cfg.Layout.KeptSpace != "inline";
+        string mode = _cfg.Layout.KeptSpace;
+        bool bottom = mode == "bottom", section = mode == "section";
         var height = new int[entries.Count];
         var real = new int[entries.Count];
         var output = new List<Line>?[entries.Count];
+        var pads = new int[entries.Count];
         int pad = 0;
         for (int i = 0; i < entries.Count; i++)
         {
@@ -184,6 +193,7 @@ public sealed class StatusComposer
             int h = _keep.Reserve(e.Id, lines.Count, _now, hold);
             var list = new List<Line>(lines);
             if (bottom) pad += h - lines.Count;
+            else if (section) pads[i] = h - lines.Count;
             else while (list.Count < h) list.Add(Layout.Blank(padding: true));
             height[i] = h;
             real[i] = lines.Count;
@@ -192,6 +202,13 @@ public sealed class StatusComposer
 
         var result = new List<Line>();
         var decos = new HashSet<Line>(ReferenceEqualityComparer.Instance);
+        // "section": the kept space of a section's items goes to the end of the section.
+        int sectionPad = 0;
+        void FlushSection()
+        {
+            for (int k = 0; k < sectionPad; k++) result.Add(Layout.Blank(padding: true));
+            sectionPad = 0;
+        }
         for (int i = 0; i < entries.Count; i++)
         {
             var e = entries[i];
@@ -199,16 +216,20 @@ public sealed class StatusComposer
             if (e.Kind == "item")
             {
                 result.AddRange(output[i]!);
+                sectionPad += pads[i];
                 continue;
             }
+            FlushSection();
             if (e.Collapse && GroupHeight(entries, height, i) == 0) continue;
             // A section that only keeps space: its header/spacer line is kept space too (at the bottom).
             if (bottom && e.Collapse && GroupHeight(entries, real, i) == 0) { pad++; continue; }
             var deco = e.Kind == "header" ? Layout.Header(e.Text ?? "", _c) : Layout.Spacer(e.Preset, e.Text, _c);
             if (e.Kind == "header" && _c.Theme.HeaderBand) deco.Back = _c.Band(_c.Header, 30);
+            if (e.Kind == "header" && !_c.Theme.HeaderTextShadow) deco.NoShadow = true;
             result.Add(deco);
             decos.Add(deco);
         }
+        FlushSection();
         if (_c.Theme.RowStripes) Stripe(result, decos);
         // No empty lines at the top or bottom of the widget.
         while (result.Count > 0 && IsEmpty(result[0]) && !result[0].IsPadding) result.RemoveAt(0);
@@ -223,7 +244,7 @@ public sealed class StatusComposer
             int padding = result.Count(l => l.IsPadding);
             if (result.Count != _lastCount || padding != _lastPadding)
             {
-                _trace($"widget height {(_lastCount < 0 ? "-" : _lastCount.ToString(System.Globalization.CultureInfo.InvariantCulture))} → {result.Count} lines ({padding} kept empty{(bottom ? " at the bottom" : "")})");
+                _trace($"widget height {(_lastCount < 0 ? "-" : _lastCount.ToString(System.Globalization.CultureInfo.InvariantCulture))} → {result.Count} lines ({padding} kept empty{(bottom ? " at the bottom" : section ? " at section ends" : "")})");
                 _lastCount = result.Count;
                 _lastPadding = padding;
             }
@@ -275,7 +296,15 @@ public sealed class StatusComposer
     {
         var c = color ?? _c.Text;
         bool chip = _c.Theme.ValueChips && c != _c.Text && text.Trim().Length > 0;
-        return b.Add(text, c, ValueStyle, chip ? _c.Band(c, 60) : default);
+        if (!chip) return b.Add(text, c, ValueStyle);
+        // The chip covers the text only, not the padding of the 4-character field.
+        string core = text.Trim();
+        int lead = text.Length - text.TrimStart().Length;
+        if (lead > 0) b.Add(text[..lead], _c.Dim);
+        b.Add(core, c, ValueStyle, _c.Band(c, 60));
+        int trail = text.Length - lead - core.Length;
+        if (trail > 0) b.Add(new string(' ', trail), _c.Dim);
+        return b;
     }
 
     private Shade GraphBack => _c.Theme.GraphTrack ? _c.Band(_c.Dim, 50) : default;
@@ -340,7 +369,7 @@ public sealed class StatusComposer
         double load = Math.Clamp(cpu.Load, 0, 100);
         var h = Hist("cpu");
         h.Add(load);
-        bool tempVis = f.CpuTemp && cpu.Temp is { } temp0 && Vis("cpu.temp", t.CpuTemp.Crossed(temp0));
+        bool tempVis = f.CpuTemp && cpu.Temp is { } temp0 && (Vis("cpu.temp", t.CpuTemp.Crossed(temp0)) | f.CpuTempAlways);
 
         if (On("cpu.load"))
         {
@@ -374,8 +403,9 @@ public sealed class StatusComposer
             for (int i = 0; i < smooth.Length; i++)
             {
                 double temp = temps != null && i < temps.Length ? temps[i] : double.NaN;
-                bool hotTemp = !double.IsNaN(temp) && (t.CpuTemp.Crossed(temp) || (!double.IsNaN(medianTemp) && temp - medianTemp >= t.HotCoreTempDelta));
-                bool isHot = outliers.Contains(i) || smooth[i] >= t.HotCoreLoad || hotTemp;
+                string ck = "core." + i;
+                bool hotTemp = !double.IsNaN(temp) && (Above(ck, temp, t.CpuTemp.Warn, 3) || (!double.IsNaN(medianTemp) && Above(ck, temp - medianTemp, t.HotCoreTempDelta, 3)));
+                bool isHot = outliers.Contains(i) || Above(ck, smooth[i], t.HotCoreLoad, 15) || hotTemp;
                 bool vis = _preview ? isHot || i == ArgMax(smooth) : _vis.Update("core." + i, isHot, _now);
                 if (!vis) continue;
                 double clock = cpu.CoreClocksMHz is { } cl && i < cl.Length ? cl[i] : 0;
@@ -531,19 +561,22 @@ public sealed class StatusComposer
             {
                 double loss = gwLoss || (_preview && !netLoss) ? q.GatewayLoss : q.InternetLoss;
                 var b = Label("loss", _c.Label);
-                Val(b, Format.Pct4(loss), _c.Severity(loss, t.PacketLoss.Warn, t.PacketLoss.Crit)).Add(gwLoss ? "  local network" : "  internet (isp)", _c.Unit);
+                Val(b, Format.Pct4(loss), _c.Severity(loss, t.PacketLoss.Warn, t.PacketLoss.Crit)).Add(gwLoss ? "  local network" : "  " + (_cfg.Network.ShowPingHost && q.InternetHost.Length > 0 ? q.InternetHost : "internet"), _c.Unit);
                 lines.Add(b.Build());
             }
-            if (q.GatewayMs is { } gms && Vis("net.gwping", t.GatewayLatency.Crossed(gms))) lines.Add(PingLine("lan", gms, t.GatewayLatency));
-            if (q.InternetMs is { } ims && Vis("net.netping", t.InternetLatency.Crossed(ims))) lines.Add(PingLine("isp", ims, t.InternetLatency));
+            bool always = _cfg.Network.PingAlways;
+            if (q.GatewayMs is { } gms && (Vis("net.gwping", t.GatewayLatency.Crossed(gms)) | always)) lines.Add(PingLine("lan", q.GatewayHost, gms, t.GatewayLatency));
+            if (q.InternetMs is { } ims && (Vis("net.netping", t.InternetLatency.Crossed(ims)) | always)) lines.Add(PingLine("net", q.InternetHost, ims, t.InternetLatency));
             items["net.quality"] = lines;
         }
     }
 
-    private Line PingLine(string where, double ms, Threshold th)
+    /// <summary>"ping  12 ms  192.168.1.1" (local gateway) or "ping  31 ms  1.1.1.1" (internet host); without the host: "lan"/"net".</summary>
+    private Line PingLine(string where, string host, double ms, Threshold th)
     {
         var b = Label("ping", _c.Label);
-        Val(b, Format.Num4(ms), _c.Severity(ms, th.Warn, th.Crit)).Add(" ms  " + where, _c.Unit);
+        Val(b, Format.Num4(ms), _c.Severity(ms, th.Warn, th.Crit)).Add(" ms  ", _c.Unit);
+        b.Add(_cfg.Network.ShowPingHost && host.Length > 0 ? Format.FitDots(host, Layout.Width - b.Column).TrimEnd() : where, _c.Unit);
         return b.Build();
     }
 
@@ -580,7 +613,7 @@ public sealed class StatusComposer
             string key = "gpu." + g.Luid;
             if (g.Load is { } gl) Hist(key).Add(Math.Clamp(gl, 0, 100));
 
-            bool loadVis = g.Load is { } l && Vis(key + ".load", l >= t.GpuLoad);
+            bool loadVis = g.Load is { } l && Vis(key + ".load", Above(key + ".load", l, t.GpuLoad, Math.Min(5, t.GpuLoad / 2)));
             bool tempVis = _cfg.Fields.GpuTemp && g.Temp is { } tc && Vis(key + ".temp", t.GpuTemp.Crossed(tc));
             if (On("gpu.load") && (loadVis || tempVis))
             {
@@ -610,7 +643,7 @@ public sealed class StatusComposer
 
             if (On("gpu.top") && g.Load is { } l2)
             {
-                bool vis = Vis(key + ".top", l2 >= t.GpuTopProcessLoad);
+                bool vis = Vis(key + ".top", Above(key + ".top", l2, t.GpuTopProcessLoad, 15));
                 var p = Sticky(key, vis ? g.Tops : null);
                 if (vis && p != null) topLines.Add(ProcessLine(p));
             }
@@ -652,7 +685,14 @@ public sealed class StatusComposer
             {
                 any = true;
                 var c = _c.Severity(commitPct, t.Commit.Warn, t.Commit.Crit);
-                items["mem.commit"] = new() { AmountLine("commit", m.CommitBytes, m.CommitLimitBytes, c) };
+                // Commit = RAM + page file in use; the page file has its own line under it.
+                var lines = new List<Line> { AmountLine("commit", m.CommitBytes, m.CommitLimitBytes, c) };
+                if (m.PageFileTotalBytes is { } pft && pft > 0 && m.PageFileUsedBytes is { } pfu)
+                {
+                    double pfPct = 100.0 * pfu / pft;
+                    lines.Add(AmountLine("pagefile", pfu, pft, _c.Severity(pfPct, t.Commit.Warn, t.Commit.Crit)));
+                }
+                items["mem.commit"] = lines;
             }
             pending |= cond || _vis.IsPending("mem.commit");
         }
@@ -669,7 +709,7 @@ public sealed class StatusComposer
             bool cond = t.PageFaults.Crossed(pf);
             bool vis = Vis("mem.pf", cond);
             bool hardActive = cond || vis || _vis.IsPending("mem.pf");
-            bool softCond = !hardActive && m.SoftFaultsPerSec != null && t.SoftPageFaults.Crossed(soft);
+            bool softCond = !hardActive && m.SoftFaultsPerSec != null && Above("mem.soft", soft, t.SoftPageFaults.Warn, t.SoftPageFaults.Warn * 0.3);
             bool softVis = !hardActive && Vis("mem.soft", softCond);
             Needs.Faults = hardActive || softCond || softVis || _vis.IsPending("mem.soft") || _preview;
             if (vis || softVis)
@@ -704,7 +744,7 @@ public sealed class StatusComposer
     private Line AmountLine(string name, double amount, double total, Rgb color)
     {
         var b = new LineBuilder();
-        b.Add(name, _c.Memory).PadTo(7);
+        b.Add(name, _c.Memory).PadTo(9); // "used", "commit", "pagefile": same columns
         return AmountRest(b, amount, total, color);
     }
 
@@ -953,8 +993,7 @@ public sealed class StatusComposer
                 break;
             }
             default:
-                runs = new[] { new Run(Icons.Clock + " ", _c.Dim, RunStyle.Icon), new Run(" too early to project", _c.Dim) };
-                if (r.Column + 2 + LineBuilder.Len(runs) > Layout.Width) runs[1] = new Run(" too early", _c.Dim);
+                runs = new[] { new Run(Icons.Clock + " ", _c.Dim, RunStyle.Icon), new Run(" no trend yet", _c.Dim) };
                 break;
         }
         r.Right(runs);

@@ -188,7 +188,9 @@ public class StabilityTests
         Assert.Equal(2, s.Update(new[] { P(2, 60), P(1, 30) }, T0.AddSeconds(11), stick)!.Pid);
         // The shown process is gone: change at once.
         Assert.Equal(3, s.Update(new[] { P(3, 10) }, T0.AddSeconds(12), stick)!.Pid);
-        Assert.Null(s.Update(null, T0.AddSeconds(13), stick));
+        // A short gap in the candidates keeps the shown process for the stick time.
+        Assert.Equal(3, s.Update(null, T0.AddSeconds(13), stick)!.Pid);
+        Assert.Null(s.Update(null, T0.AddSeconds(23), stick));
     }
 }
 
@@ -690,5 +692,59 @@ public class SoftPagingAndPeakTests
         Assert.Equal(0.2, p.Fraction(20), 3);
         p.Add(t0.AddMinutes(61), 30);
         Assert.Equal(30, p.Max);
+    }
+}
+
+public class V6Tests
+{
+    [Theory]
+    [InlineData("double", '═')]
+    [InlineData("heavy", '━')]
+    [InlineData("box", '╡')]
+    [InlineData("wave", '∿')]
+    [InlineData("chevron", '»')]
+    public void NewHeaderStyles(string style, char ch)
+    {
+        var h = Layout.Header("gpu", ThemeColors.From(new Theme { HeaderStyle = style }));
+        Assert.Contains(ch, h.Text);
+        Assert.Contains("gpu", h.Text);
+        Assert.Equal(Layout.Width, h.Length);
+    }
+
+    [Fact]
+    public void PingLine_ShowsHost_Always()
+    {
+        var cfg = new EmberSettings();
+        cfg.Entries.First(e => e.Id == "net.quality").Enabled = true;
+        cfg.Network.PingAlways = true;
+        var c = new StatusComposer();
+        var lines = c.Compose(new Snapshot
+        {
+            Time = new DateTime(2026, 10, 1, 12, 0, 0),
+            Quality = new Ember.Core.Net.NetQuality(0, 0, 2, 14, true, "192.168.1.1", "1.1.1.1"),
+        }, cfg);
+        Assert.Contains(lines, l => l.Text.StartsWith("ping") && l.Text.Contains("1.1.1.1"));
+        Assert.Contains(lines, l => l.Text.StartsWith("ping") && l.Text.Contains("192.168.1.1"));
+        cfg.Network.ShowPingHost = false;
+        lines = new StatusComposer().Compose(new Snapshot { Time = new DateTime(2026, 10, 1, 12, 0, 0), Quality = new Ember.Core.Net.NetQuality(0, 0, 2, 14, true, "192.168.1.1", "1.1.1.1") }, cfg);
+        Assert.Contains(lines, l => l.Text.StartsWith("ping") && l.Text.TrimEnd().EndsWith("net"));
+    }
+
+    [Fact]
+    public void Chips_CoverTextOnly()
+    {
+        var cfg = new EmberSettings { PreviewAll = true };
+        cfg.Theme.ValueChips = true;
+        var lines = new StatusComposer().Compose(new Snapshot { Time = new DateTime(2026, 10, 1, 12, 0, 0) }, cfg);
+        var chips = lines.SelectMany(l => l.Runs).Where(r => r.Back.Visible).ToList();
+        Assert.NotEmpty(chips);
+        Assert.All(chips, r => Assert.Equal(r.Text.Trim(), r.Text));
+    }
+
+    [Fact]
+    public void CpuTemperature_ShownAlwaysByDefault()
+    {
+        var lines = new StatusComposer().Compose(new Snapshot { Time = new DateTime(2026, 10, 1, 12, 0, 0), Cpu = new CpuData { Load = 5, Temp = 48 } }, new EmberSettings());
+        Assert.StartsWith("cpu   48°", lines.First(l => l.Text.StartsWith("cpu")).Text);
     }
 }

@@ -45,7 +45,7 @@ public sealed class Theme
     /// <summary>Filled bar cells coloured along the graph stops (by position) instead of the category accent.</summary>
     public bool BarGradient { get; set; } = false;
 
-    /// <summary>Header style: rule, spaced, plain, bracket, dots, fade.</summary>
+    /// <summary>Header style: rule, spaced, plain, bracket, dots, fade, double, heavy, box, angle, wave, diamond, arrow, chevron, blocks.</summary>
     public string HeaderStyle { get; set; } = "rule";
     /// <summary>Header title position: left, center, right.</summary>
     public string HeaderAlign { get; set; } = "left";
@@ -53,6 +53,10 @@ public sealed class Theme
     public int HeaderIndent { get; set; } = 2;
     /// <summary>An icon for the section before the header title.</summary>
     public bool HeaderIcons { get; set; } = false;
+    /// <summary>Text shadow (when the background has one) also on section headers.</summary>
+    public bool HeaderTextShadow { get; set; } = true;
+    /// <summary>Rounding of value chips and tracks: 0 (square) to 100 (fully round ends), in %.</summary>
+    public int ChipRadius { get; set; } = 40;
     public bool HeaderUpper { get; set; } = false;
     public bool HeaderBold { get; set; } = true;
     public bool BoldValues { get; set; } = true;
@@ -185,13 +189,14 @@ public static class ThemeStore
             t.HeaderAlign = HeaderAligns.Contains(t.HeaderAlign) ? t.HeaderAlign : "left";
             t.HeaderIndent = Math.Clamp(t.HeaderIndent, 0, 24);
             t.BandOpacity = Math.Clamp(t.BandOpacity, 0, 300);
+            t.ChipRadius = Math.Clamp(t.ChipRadius, 0, 100);
             return t;
         }
         catch (JsonException) { return null; }
     }
 
     public static readonly string[] BackgroundKinds = { "none", "solid", "gradient", "acrylic", "blur", "panel", "glass" };
-    public static readonly string[] HeaderStyles = { "rule", "spaced", "plain", "bracket", "dots", "fade" };
+    public static readonly string[] HeaderStyles = { "rule", "spaced", "plain", "bracket", "dots", "fade", "double", "heavy", "box", "angle", "wave", "diamond", "arrow", "chevron", "blocks" };
     public static readonly string[] HeaderAligns = { "left", "center", "right" };
     public static readonly string[] BarStyles = { "colons", "squares", "pips", "braille", "line", "shade", "blocks" };
     public static readonly string[] GraphColorings = { "intensity", "category", "mono" };
@@ -291,7 +296,7 @@ public static class ThemeStore
         Cpu = "#50FA7B", NetDown = "#8BE9FD", NetUp = "#FF79C6", Gpu = "#BD93F9", Memory = "#F1FA8C", Disk = "#FFB86C",
         Claude = "#FFB86C", Codex = "#8BE9FD", Copilot = "#BD93F9", Device = "#50FA7B", Process = "#F8F8F2",
         GraphColoring = "intensity", GraphStops = new() { "#50FA7B", "#F1FA8C", "#FF5555" },
-        BarStyle = "pips", HeaderStyle = "rule", ValueChips = true,
+        BarStyle = "pips", HeaderStyle = "double", ValueChips = true,
         Background = new BackgroundTheme { Kind = "gradient", Color = "#282A36", Color2 = "#1E1F29", Opacity = 90, CornerRadius = 12, Border = "#6272A4", BorderOpacity = 30, GradientAngle = 90, Padding = 12 },
     };
 
@@ -304,7 +309,7 @@ public static class ThemeStore
         Cpu = "#7DCFFF", NetDown = "#9ECE6A", NetUp = "#FF9E64", Gpu = "#BB9AF7", Memory = "#7AA2F7", Disk = "#E0AF68",
         Claude = "#FF9E64", Codex = "#7DCFFF", Copilot = "#BB9AF7", Device = "#9ECE6A", Process = "#C0CAF5",
         GraphColoring = "intensity", GraphStops = new() { "#7AA2F7", "#BB9AF7", "#F7768E" },
-        BarStyle = "line", BarGradient = true, HeaderStyle = "rule", HeaderAlign = "center", HeaderIcons = true, GraphTrack = true,
+        BarStyle = "line", BarGradient = true, HeaderStyle = "angle", HeaderAlign = "center", HeaderIcons = true, GraphTrack = true,
         Background = new BackgroundTheme { Kind = "acrylic", Color = "#1A1B26", Opacity = 70, CornerRadius = 14, Border = "#7AA2F7", BorderOpacity = 18, Padding = 12 },
     };
 
@@ -369,7 +374,7 @@ public static class ThemeStore
         Cpu = "#EBBCBA", NetDown = "#9CCFD8", NetUp = "#F6C177", Gpu = "#C4A7E7", Memory = "#31748F", Disk = "#F6C177",
         Claude = "#EBBCBA", Codex = "#9CCFD8", Copilot = "#C4A7E7", Device = "#9CCFD8", Process = "#E0DEF4",
         GraphColoring = "intensity", GraphStops = new() { "#31748F", "#F6C177", "#EB6F92" },
-        BarStyle = "braille", HeaderStyle = "fade", HeaderIndent = 0, HeaderIcons = true,
+        BarStyle = "braille", HeaderStyle = "diamond", HeaderIndent = 0, HeaderIcons = true,
         Background = new BackgroundTheme { Kind = "glass", Color = "#191724", Color2 = "#EBBCBA", Opacity = 55, CornerRadius = 16, Border = "#EBBCBA", BorderOpacity = 16, Padding = 12, TextShadow = true },
     };
 
@@ -382,7 +387,7 @@ public static class ThemeStore
         Cpu = "#98BB6C", NetDown = "#7FB4CA", NetUp = "#D27E99", Gpu = "#957FB8", Memory = "#7E9CD8", Disk = "#E6C384",
         Claude = "#FFA066", Codex = "#7FB4CA", Copilot = "#957FB8", Device = "#98BB6C", Process = "#DCD7BA",
         GraphColoring = "intensity", GraphStops = new() { "#7E9CD8", "#E6C384", "#E82424" },
-        BarStyle = "squares", HeaderStyle = "spaced", HeaderIndent = 1, BarTrack = true,
+        BarStyle = "squares", HeaderStyle = "wave", BarTrack = true,
         Background = new BackgroundTheme { Kind = "gradient", Color = "#1F1F28", Color2 = "#16161D", Opacity = 88, CornerRadius = 8, Border = "#54546D", BorderOpacity = 50, GradientAngle = 135, Padding = 12 },
     };
 
@@ -395,7 +400,7 @@ public static class ThemeStore
         Cpu = "#A6E22E", NetDown = "#66D9EF", NetUp = "#AE81FF", Gpu = "#AE81FF", Memory = "#66D9EF", Disk = "#E6DB74",
         Claude = "#FD971F", Codex = "#66D9EF", Copilot = "#AE81FF", Device = "#A6E22E", Process = "#F8F8F2",
         GraphColoring = "intensity", GraphStops = new() { "#A6E22E", "#E6DB74", "#F92672" },
-        BarStyle = "blocks", BarGradient = true, HeaderStyle = "bracket", HeaderUpper = true, ValueChips = true, GraphTrack = true,
+        BarStyle = "blocks", BarGradient = true, HeaderStyle = "box", HeaderUpper = true, ValueChips = true, GraphTrack = true,
         Background = new BackgroundTheme { Kind = "panel", Color = "#272822", Opacity = 95, CornerRadius = 6, Border = "#49483E", BorderOpacity = 100, Padding = 10 },
     };
 

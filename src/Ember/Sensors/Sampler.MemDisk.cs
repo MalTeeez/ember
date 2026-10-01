@@ -57,12 +57,15 @@ internal sealed partial class Sampler
             return null;
         }
         SysInfo.Commit(out ulong commit, out ulong limit); // zero on failure: commit item hides
+        bool pageFile = (cfg.IsOn("mem.commit") || cfg.PreviewAll) && SysInfo.PageFiles(out ulong pfUsed, out ulong pfTotal);
         return new MemData
         {
             AvailBytes = avail,
             TotalBytes = total,
             CommitBytes = commit,
             CommitLimitBytes = limit,
+            PageFileUsedBytes = pageFile ? pfUsed : null,
+            PageFileTotalBytes = pageFile ? pfTotal : null,
             PagesInPerSec = pdhOk ? _pagesIn?.Value() : null,
             // Soft faults = all page faults minus the reads from disk (each hard fault is one read).
             SoftFaultsPerSec = pdhOk && _pageFaults?.Value() is { } all ? Math.Max(0, all - (_pageReads?.Value() ?? 0)) : null,

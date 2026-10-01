@@ -25,6 +25,15 @@ internal struct RECT
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct DWM_BLURBEHIND
+{
+    public uint dwFlags;
+    public int fEnable;
+    public IntPtr hRgnBlur;
+    public int fTransitionOnMaximized;
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct MSG
 {
     public IntPtr hwnd;
@@ -320,6 +329,8 @@ internal static class W
     [DllImport("user32.dll")] public static extern bool RedrawWindow(IntPtr hwnd, IntPtr rect, IntPtr rgn, uint flags);
     public const uint RDW_INVALIDATE = 0x1, RDW_ERASE = 0x4, RDW_ALLCHILDREN = 0x80, RDW_UPDATENOW = 0x100, RDW_FRAME = 0x400;
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    [DllImport("dwmapi.dll")] public static extern int DwmEnableBlurBehindWindow(IntPtr hwnd, ref DWM_BLURBEHIND bb);
+    public const uint DWM_BB_ENABLE = 1, DWM_BB_BLURREGION = 2;
     public const int DWMWA_NCRENDERING_POLICY = 2, DWMNCRP_DISABLED = 1, DWMWA_WINDOW_CORNER_PREFERENCE = 33,
         DWMWCP_DONOTROUND = 1, DWMWCP_ROUND = 2, DWMWCP_ROUNDSMALL = 3;
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr hwnd, uint msg, IntPtr wParam, ref PARAFORMAT2 lParam);

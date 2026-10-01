@@ -53,8 +53,30 @@ internal static class Backdrop
         {
             int d = (int)Math.Round(2 * bg.CornerRadius * scale);
             W.SetWindowRgn(hwnd, d > 0 ? W.CreateRoundRectRgn(0, 0, width + 1, height + 1, d, d) : IntPtr.Zero, true);
+            // The system blur of a layered window can ignore the window region: also give DWM the
+            // rounded blur region, so the blur is cut at the corners too.
+            ClipBlur(hwnd, d > 0 ? W.CreateRoundRectRgn(0, 0, width + 1, height + 1, d, d) : IntPtr.Zero);
         }
-        else W.SetWindowRgn(hwnd, IntPtr.Zero, true);
+        else
+        {
+            W.SetWindowRgn(hwnd, IntPtr.Zero, true);
+            ClipBlur(hwnd, IntPtr.Zero);
+        }
+    }
+
+    private static void ClipBlur(IntPtr hwnd, IntPtr region)
+    {
+        try
+        {
+            var bb = new DWM_BLURBEHIND { dwFlags = W.DWM_BB_ENABLE | W.DWM_BB_BLURREGION, fEnable = region != IntPtr.Zero ? 1 : 0, hRgnBlur = region };
+            W.DwmEnableBlurBehindWindow(hwnd, ref bb);
+        }
+        catch (DllNotFoundException) { }
+        catch (EntryPointNotFoundException) { }
+        finally
+        {
+            if (region != IntPtr.Zero) W.DeleteObject(region); // DWM copies the region
+        }
     }
 
     /// <summary>Paints the background into the bitmap (the system blur, if any, is behind it).</summary>

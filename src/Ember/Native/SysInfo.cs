@@ -127,6 +127,40 @@ internal static class SysInfo
         return true;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ENUM_PAGE_FILE_INFORMATION
+    {
+        public uint cb, Reserved;
+        public UIntPtr TotalSize, TotalInUse, PeakUsage;
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate bool EnumPageFilesProc(IntPtr context, ref ENUM_PAGE_FILE_INFORMATION info, IntPtr fileName);
+
+    [DllImport("psapi.dll", EntryPoint = "EnumPageFilesW")]
+    private static extern bool EnumPageFiles(EnumPageFilesProc callback, IntPtr context);
+
+    /// <summary>All page files together: bytes in use and total size. False if there is no page file.</summary>
+    public static bool PageFiles(out ulong used, out ulong total)
+    {
+        ulong u = 0, t = 0;
+        ulong page = (ulong)Environment.SystemPageSize;
+        bool ok;
+        try
+        {
+            ok = EnumPageFiles((IntPtr _, ref ENUM_PAGE_FILE_INFORMATION info, IntPtr _) =>
+            {
+                t += (ulong)info.TotalSize * page;
+                u += (ulong)info.TotalInUse * page;
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch (EntryPointNotFoundException) { ok = false; }
+        used = u;
+        total = t;
+        return ok && t > 0;
+    }
+
     // ───────── Volumes ─────────
 
     public static List<(string Root, ulong Free, ulong Total)> FixedVolumes()

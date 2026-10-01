@@ -171,4 +171,4 @@ public sealed class PingStats
 }
 
 /// <summary>Network quality summary.</summary>
-public sealed record NetQuality(double GatewayLoss, double InternetLoss, double? GatewayMs, double? InternetMs, bool HasGateway);
+public sealed record NetQuality(double GatewayLoss, double InternetLoss, double? GatewayMs, double? InternetMs, bool HasGateway, string GatewayHost = "", string InternetHost = "");

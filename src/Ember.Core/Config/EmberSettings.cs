@@ -23,6 +23,8 @@ public sealed class FieldSettings
 {
     public bool CpuTemp { get; set; } = true;
     public bool CpuClock { get; set; } = true;
+    /// <summary>CPU temperature on the cpu line always (else only when it crosses its warning value).</summary>
+    public bool CpuTempAlways { get; set; } = true;
     /// <summary>Temperature and clock on hot-core lines.</summary>
     public bool CoreDetails { get; set; } = true;
     public bool GpuTemp { get; set; } = true;
@@ -76,7 +78,7 @@ public sealed class ThresholdSettings
 public sealed class IntervalSettings
 {
     public double SensorSeconds { get; set; } = 1;
-    public double ClaudeSeconds { get; set; } = 60;
+    public double ClaudeSeconds { get; set; } = 120;
     public double CodexSeconds { get; set; } = 60;
     public double CopilotSeconds { get; set; } = 300;
     public double BatterySeconds { get; set; } = 60;
@@ -92,6 +94,10 @@ public sealed class NetworkSettings
         "Hyper-V", "vEthernet", "VirtualBox", "VMware",
     };
     public string InternetHost { get; set; } = "1.1.1.1";
+    /// <summary>Show the pinged host (gateway address, internet host) on the ping lines.</summary>
+    public bool ShowPingHost { get; set; } = true;
+    /// <summary>Show the ping lines always (coloured by the thresholds), not only when slow.</summary>
+    public bool PingAlways { get; set; } = false;
 }
 
 public enum Corner { TopLeft, TopRight, BottomLeft, BottomRight }
@@ -115,7 +121,7 @@ public sealed class LayoutSettings
     public double ProcessStickSeconds { get; set; } = 15;
     /// <summary>Animate size changes.</summary>
     /// <summary>Where kept space (empty lines of shrunk items) goes: "bottom" of the widget, or "inline" (where the item was).</summary>
-    public string KeptSpace { get; set; } = "bottom";
+    public string KeptSpace { get; set; } = "section";
     public bool Animate { get; set; } = true;
     public int AnimationMs { get; set; } = 160;
 }
@@ -164,7 +170,7 @@ public sealed class EmberSettings
         Thresholds ??= new(); Intervals ??= new(); Network ??= new(); Layout ??= new(); Notes ??= new();
         Network.ExcludedAdapters ??= new();
         Intervals.SensorSeconds = Math.Clamp(Intervals.SensorSeconds, 0.25, 60);
-        Intervals.ClaudeSeconds = Math.Clamp(Intervals.ClaudeSeconds, 60, 3600);
+        Intervals.ClaudeSeconds = Math.Clamp(Intervals.ClaudeSeconds, 120, 3600);
         Intervals.CodexSeconds = Math.Clamp(Intervals.CodexSeconds, 60, 3600);
         Intervals.CopilotSeconds = Math.Clamp(Intervals.CopilotSeconds, 60, 3600);
         Intervals.BatterySeconds = Math.Clamp(Intervals.BatterySeconds, 10, 3600);
@@ -182,7 +188,7 @@ public sealed class EmberSettings
         Layout.Monitor = Math.Max(0, Layout.Monitor);
         if (string.IsNullOrWhiteSpace(Layout.Font)) Layout.Font = "Cascadia Mono";
         Notes.NewNoteHotkey ??= "";
-        Layout.KeptSpace = Layout.KeptSpace is "inline" ? "inline" : "bottom";
+        Layout.KeptSpace = Layout.KeptSpace is "inline" or "bottom" ? Layout.KeptSpace : "section";
         Notes.Opacity = Math.Clamp(Notes.Opacity, 30, 100);
         Network.InternetHost = string.IsNullOrWhiteSpace(Network.InternetHost) ? "1.1.1.1" : Network.InternetHost.Trim();
     }

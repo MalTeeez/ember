@@ -13,7 +13,7 @@ namespace Ember.Ui;
 internal sealed class TextRenderer : IDisposable
 {
     private const string FallbackFace = "Segoe UI Symbol";
-    private const string SpecialChars = "⣿⡀█▉▊▋▌▍▎▏│└─━╌═┤├↓↑°…—■•░";
+    private const string SpecialChars = "⣿⡀█▉▊▋▌▍▎▏│└─━╌═┤├↓↑°…—■•░╡╞╼╾∿◆·▸◂»«▐";
 
     private IntPtr _family, _font, _bold, _fbFamily, _fbFont, _iconFamily, _iconFont, _format, _center, _brush;
     private readonly HashSet<char> _missing = new();
@@ -130,14 +130,14 @@ internal sealed class TextRenderer : IDisposable
     /// Draws the lines. Text alpha = <paramref name="alpha"/> (text opacity). With <paramref name="shadow"/>,
     /// each glyph first gets a dark copy 1 px down-right. Lines below <paramref name="maxY"/> are not drawn.
     /// </summary>
-    public void Draw(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, byte alpha, bool shadow, float maxY = float.MaxValue)
+    public void Draw(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, byte alpha, bool shadow, float maxY = float.MaxValue, float chipRound = 0.4f)
     {
         Gdip.GdipSetTextRenderingHint(g, Gdip.TextRenderingHintAntiAliasGridFit);
-        DrawBacks(g, lines, x0, y0, alpha, maxY);
+        DrawBacks(g, lines, x0, y0, alpha, maxY, chipRound);
         if (shadow)
         {
             float off = Math.Max(1, EmPixels / 13f);
-            DrawPass(g, lines, x0 + off, y0 + off, _ => (uint)(Math.Min(alpha, (byte)170) << 24), maxY);
+            DrawPass(g, lines, x0 + off, y0 + off, _ => (uint)(Math.Min(alpha, (byte)170) << 24), maxY, shadowPass: true);
         }
         DrawPass(g, lines, x0, y0, c => c.ToArgb(alpha), maxY);
     }
@@ -146,7 +146,7 @@ internal sealed class TextRenderer : IDisposable
     /// Backgrounds: line bands (full width, slightly rounded), then run backgrounds behind their cells
     /// (chips, graph and bar tracks). Their alpha is scaled by the text opacity.
     /// </summary>
-    private void DrawBacks(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, byte alpha, float maxY)
+    private void DrawBacks(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, byte alpha, float maxY, float chipRound)
     {
         float y = y0;
         float pad = Math.Max(1, CellWidth * 0.25f);
@@ -164,8 +164,12 @@ internal sealed class TextRenderer : IDisposable
                 void Flush(int end)
                 {
                     if (start >= 0 && cur.Visible && end > start)
+                    {
+                        // Chips hug their text: a little wider than the cells, rounded by the theme's setting.
+                        float padX = CellWidth * 0.2f, hgt = LineHeight - 2;
                         Gdip.FillRoundRect(g, cur.Color.ToArgb((byte)(cur.Alpha * alpha / 255)),
-                            x0 + start * CellWidth, y + 1, (end - start) * CellWidth, LineHeight - 2, LineHeight * 0.2f);
+                            x0 + start * CellWidth - padX, y + 1, (end - start) * CellWidth + 2 * padX, hgt, Math.Clamp(chipRound, 0, 1) * hgt / 2);
+                    }
                 }
                 foreach (var run in line.Runs)
                 {
@@ -179,14 +183,14 @@ internal sealed class TextRenderer : IDisposable
         }
     }
 
-    private void DrawPass(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, Func<Rgb, uint> color, float maxY)
+    private void DrawPass(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, Func<Rgb, uint> color, float maxY, bool shadowPass = false)
     {
         float y = y0;
         var seg = new System.Text.StringBuilder();
         foreach (var line in lines)
         {
             if (y >= maxY) break;
-            if (line.IsPadding) { y += LineHeight; continue; }
+            if (line.IsPadding || (shadowPass && line.NoShadow)) { y += LineHeight; continue; }
             int col = 0;
             foreach (var run in line.Runs)
             {

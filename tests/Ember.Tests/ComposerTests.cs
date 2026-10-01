@@ -87,6 +87,7 @@ public class ComposerTests
     {
         var c = new StatusComposer();
         var cfg = Cfg();
+        cfg.Fields.CpuTempAlways = false;
         for (int i = 0; i < 5; i++)
             Assert.DoesNotContain("\u00B0", c.Compose(Snap(i, temp: 92), cfg)[0].Text);
         var line = c.Compose(Snap(5, temp: 92), cfg)[0];
@@ -100,6 +101,7 @@ public class ComposerTests
     {
         var c = new StatusComposer();
         var cfg = Cfg();
+        cfg.Fields.CpuTempAlways = false;
         for (int i = 0; i <= 6; i++) c.Compose(Snap(i, temp: 92), cfg);
         Assert.Contains("\u00B0", c.Compose(Snap(7, temp: 92), cfg)[0].Text);
         Assert.DoesNotContain("\u00B0", c.Compose(Snap(8, temp: null), cfg)[0].Text);
@@ -204,7 +206,7 @@ public class ComposerTests
         Assert.True(h > 0);
         Assert.Equal("", lines[h - 1].Text.Trim());
         // No "ram" label inside the memory section: used / total, bar, percent used.
-        Assert.StartsWith("used    16GB / 16GB ", lines[h + 1].Text);
+        Assert.StartsWith("used      16GB / 16GB ", lines[h + 1].Text);
         Assert.EndsWith(" 97%", lines[h + 1].Text);
     }
 
@@ -213,6 +215,7 @@ public class ComposerTests
     {
         var c = new StatusComposer();
         var cfg = Cfg(hold: 30);
+        cfg.Layout.KeptSpace = "bottom";
         cfg.Intervals.HideDelaySeconds = 0;
         const ulong G = 1024UL * 1024 * 1024;
         var low = new MemData { AvailBytes = G / 2, TotalBytes = 16 * G, CommitBytes = 1, CommitLimitBytes = 32 * G };
@@ -229,6 +232,23 @@ public class ComposerTests
         var later = c.Compose(Snap(40, mem: ok), cfg);
         Assert.True(later.Count < shown);
         Assert.DoesNotContain(later, l => l.Text.Contains("memory"));
+    }
+
+    [Fact]
+    public void HeightIsKept_Section_EmptyLinesAtSectionEnd()
+    {
+        var c = new StatusComposer();
+        var cfg = Cfg(hold: 30);
+        cfg.Intervals.HideDelaySeconds = 0;
+        const ulong G = 1024UL * 1024 * 1024;
+        var low = new MemData { AvailBytes = G / 2, TotalBytes = 16 * G, CommitBytes = 31 * G, CommitLimitBytes = 32 * G };
+        var half = new MemData { AvailBytes = G / 2, TotalBytes = 16 * G, CommitBytes = 1, CommitLimitBytes = 32 * G };
+        for (int i = 0; i <= 6; i++) c.Compose(Snap(i, mem: low), cfg);
+        // The commit line hides: the remaining "used" line moves up, the empty line is at the end of the section.
+        var kept = c.Compose(Snap(8, mem: half), cfg);
+        int h = kept.FindIndex(l => l.Text.Contains("memory"));
+        Assert.StartsWith("used", kept[h + 1].Text);
+        Assert.True(kept[h + 2].IsPadding);
     }
 
     [Fact]

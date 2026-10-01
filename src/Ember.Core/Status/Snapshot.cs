@@ -49,6 +49,9 @@ public sealed class MemData
     public ulong CommitBytes { get; set; }
     public ulong CommitLimitBytes { get; set; }
     public double? PagesInPerSec { get; set; }
+    /// <summary>Page file use and size (all page files); null without a page file.</summary>
+    public ulong? PageFileUsedBytes { get; set; }
+    public ulong? PageFileTotalBytes { get; set; }
     /// <summary>Soft page faults per second (all page faults minus page reads from disk).</summary>
     public double? SoftFaultsPerSec { get; set; }
 }

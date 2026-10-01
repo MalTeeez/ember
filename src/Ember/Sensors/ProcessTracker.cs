@@ -47,7 +47,7 @@ internal sealed class ProcessTracker
 
     private double Seconds => Math.Max(0.001, (_curTime - _prevTime).TotalSeconds);
 
-    private static bool Skip(ProcSample p) => p.Pid <= 4 || p.Name is "Idle" or "System" or "Memory Compression" or "Registry";
+    private static bool Skip(ProcSample p) => p.Pid <= 4 || p.Name is "Idle" or "System" or "Memory Compression" or "Registry" or "Secure System";
 
     private const int TopCount = 5;
 

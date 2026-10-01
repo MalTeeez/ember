@@ -31,27 +31,35 @@ internal abstract class UsagePoller : IDisposable
     private volatile bool _enabled = true, _paused, _busy;
     protected abstract string Source { get; }
 
-    protected UsagePoller(TimeSpan baseInterval)
+    private DateTime _lastPoll = DateTime.MinValue;
+
+    protected UsagePoller(TimeSpan baseInterval, TimeSpan? minInterval = null)
     {
-        _backoff = new PollBackoff(baseInterval);
+        _backoff = new PollBackoff(baseInterval, minInterval);
         _timer = new Timer(_ => _ = PollAsync(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
-    /// <summary>Applies the interval and on/off setting. Polls soon when turned on.</summary>
+    /// <summary>
+    /// Applies the interval and on/off setting. Turned on: polls soon. A new interval counts from the
+    /// last poll (no extra request, so changing the interval never causes a 429).
+    /// </summary>
     public void Configure(bool enabled, double intervalSeconds)
     {
-        var interval = TimeSpan.FromSeconds(Math.Clamp(intervalSeconds, 60, 3600));
-        bool changed = interval != _backoff.Base || enabled != _enabled;
+        var interval = TimeSpan.FromSeconds(Math.Clamp(intervalSeconds, _backoff.MinInterval.TotalSeconds, 3600));
+        bool intervalChanged = interval != _backoff.Base;
+        bool enabledChanged = enabled != _enabled;
         _backoff.Base = interval;
-        if (!changed) return;
-        _backoff.OnSuccess();
+        if (!intervalChanged && !enabledChanged) return;
         _enabled = enabled;
         if (!enabled)
         {
             lock (_gate) _tracker.Fail();
             _timer.Change(Timeout.Infinite, Timeout.Infinite);
+            return;
         }
-        else Schedule(TimeSpan.FromSeconds(1));
+        if (enabledChanged) { _backoff.OnSuccess(); Schedule(TimeSpan.FromSeconds(1)); return; }
+        var due = _lastPoll + _backoff.Current - DateTime.UtcNow;
+        Schedule(due < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : due);
     }
 
     public void Start() => Schedule(TimeSpan.FromSeconds(2));
@@ -87,6 +95,7 @@ internal abstract class UsagePoller : IDisposable
     {
         if (_busy || _paused || !_enabled) return;
         _busy = true;
+        _lastPoll = DateTime.UtcNow;
         try
         {
             await PollOnceAsync().ConfigureAwait(false);
@@ -159,7 +168,8 @@ internal abstract class UsagePoller : IDisposable
 internal sealed class ClaudePoller : UsagePoller
 {
     private readonly string _credentialsPath;
-    public ClaudePoller(string credentialsPath) : base(TimeSpan.FromMinutes(1)) => _credentialsPath = credentialsPath;
+    // At least 2 min: the endpoint answers 429 to every second request at 1 min.
+    public ClaudePoller(string credentialsPath) : base(TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2)) => _credentialsPath = credentialsPath;
     protected override string Source => "claude";
 
     protected override async Task<HttpRequestMessage?> CreateRequestAsync()

@@ -155,11 +155,14 @@ internal sealed class SettingsWindow : Win32Window
                 _rows.Add(row);
                 id++;
             }
-            if (page == 0)
             {
+                // A note on every page: when changes apply.
                 y += S(10);
-                Static("Changes apply at once.", left, y, width, S(36), page);
-                y += S(40);
+                string note = "Changes apply at once. Number and text fields apply when you leave them (Tab or a click elsewhere).";
+                if (SettingsSchema.Pages[page] == "Intervals")
+                    note += " A new usage interval counts from the last request (no extra request).";
+                Static(note, left, y, width, S(54), page);
+                y += S(58);
             }
             _pageHeights[page] = y + S(10);
         }
@@ -229,6 +232,19 @@ internal sealed class SettingsWindow : Win32Window
     // ───────── Values ─────────
 
     /// <summary>Shows new settings (after a preset or a change from elsewhere).</summary>
+    /// <summary>Takes the widget position (after a drag) into the working copy, without reloading the fields.</summary>
+    public void SyncPosition(EmberSettings s)
+    {
+        if (!IsAlive) return;
+        _work.Layout.Corner = s.Layout.Corner;
+        _work.Layout.OffsetX = s.Layout.OffsetX;
+        _work.Layout.OffsetY = s.Layout.OffsetY;
+        _work.Layout.Monitor = s.Layout.Monitor;
+        _loading = true;
+        LoadValues();
+        _loading = false;
+    }
+
     public void Reload(EmberSettings s)
     {
         if (!IsAlive) return;
@@ -480,6 +496,16 @@ internal sealed class SettingsWindow : Win32Window
         W.SetScrollInfo(Handle, W.SB_VERT, ref si, true);
     }
 
+    /// <summary>Wheel over the window or any of its controls scrolls the page (and nothing else).</summary>
+    public bool HandleWheel(ref MSG msg)
+    {
+        if (msg.message != W.WM_MOUSEWHEEL || !IsAlive) return false;
+        if (msg.hwnd != Handle && !W.IsChild(Handle, msg.hwnd)) return false;
+        if (msg.hwnd == _nav) return false; // the page list scrolls itself
+        ScrollTo(_scroll - W.HiWord(msg.wParam) * S(60) / 120);
+        return true;
+    }
+
     private void ScrollTo(int pos)
     {
         W.GetClientRect(Handle, out var rc);
@@ -549,8 +575,14 @@ internal sealed class SettingsWindow : Win32Window
                     if (row != null) PickColor(row);
                     return IntPtr.Zero;
                 }
-                if (id >= IdBase && (code == W.BN_CLICKED || code == W.EN_CHANGE || code == W.CBN_SELCHANGE) && RowOf(lParam) is { } r2)
-                    OnChange(r2, code);
+                // Number and text fields apply when they lose the focus (not at every key: "1" on the way to
+                // "120" would apply 1 s first); colour fields apply at once (the picker writes them).
+                if (id >= IdBase && RowOf(lParam) is { } r2)
+                {
+                    bool typed = r2.Field.Kind is FieldKind.Number or FieldKind.Text;
+                    if (code == W.BN_CLICKED || code == W.CBN_SELCHANGE || (code == W.EN_CHANGE && !typed) || (code == W.EN_KILLFOCUS && typed))
+                        OnChange(r2, code);
+                }
                 return IntPtr.Zero;
             }
             case W.WM_HSCROLL:

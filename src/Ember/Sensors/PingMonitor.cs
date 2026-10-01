@@ -60,7 +60,8 @@ internal sealed class PingMonitor : IDisposable
         lock (_gate)
         {
             if (_net.Count < 3 && _gw.Count < 3) return null;
-            return new NetQuality(_gw.LossPercent, _net.LossPercent, _gw.MedianLatency(5), _net.MedianLatency(5), _gateway != null && _gw.Count > 0);
+            return new NetQuality(_gw.LossPercent, _net.LossPercent, _gw.MedianLatency(5), _net.MedianLatency(5), _gateway != null && _gw.Count > 0,
+                _gateway?.ToString() ?? "", _host);
         }
     }
 

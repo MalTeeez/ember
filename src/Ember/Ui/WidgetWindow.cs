@@ -231,7 +231,7 @@ internal sealed class WidgetWindow : Win32Window
 
             Gdip.GdipSetClipRect(g, 0, 0, w, Math.Max(0, h - _pad / 2), Gdip.CombineModeReplace);
             byte alpha = (byte)Math.Round(255 * Math.Clamp(lay.Opacity, 10, 100) / 100.0);
-            _text.Draw(g, _lines, _pad, _pad, alpha, bg.TextShadow, h);
+            _text.Draw(g, _lines, _pad, _pad, alpha, bg.TextShadow, h, Settings.Theme.ChipRadius / 100f);
             Gdip.GdipResetClip(g);
         }
         finally

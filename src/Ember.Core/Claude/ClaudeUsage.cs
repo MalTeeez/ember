@@ -96,8 +96,10 @@ public sealed record UsageData(UsageWindow? FiveHour, UsageWindow? SevenDay, IRe
 /// <summary>Poll interval with doubling on HTTP 429.</summary>
 public sealed class PollBackoff
 {
-    /// <summary>Shortest interval (also the shortest retry): 1 min.</summary>
-    public static readonly TimeSpan MinInterval = TimeSpan.FromMinutes(1);
+    /// <summary>Default shortest interval (also the shortest retry): 1 min.</summary>
+    public static readonly TimeSpan DefaultMin = TimeSpan.FromMinutes(1);
+    /// <summary>Shortest interval of this poller.</summary>
+    public TimeSpan MinInterval { get; }
     /// <summary>Each HTTP 429 adds this to the interval.</summary>
     public static readonly TimeSpan Step = TimeSpan.FromSeconds(30);
 
@@ -115,8 +117,9 @@ public sealed class PollBackoff
     public TimeSpan Max { get; set; } = TimeSpan.FromMinutes(5);
     public TimeSpan Current { get; private set; }
 
-    public PollBackoff(TimeSpan baseInterval)
+    public PollBackoff(TimeSpan baseInterval, TimeSpan? minInterval = null)
     {
+        MinInterval = minInterval ?? DefaultMin;
         Base = baseInterval;
         Current = Base;
     }

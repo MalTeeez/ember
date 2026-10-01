@@ -77,6 +77,8 @@ public sealed class Line
     public bool IsPadding { get; init; }
     /// <summary>Background band behind the whole line (row stripes, header bands).</summary>
     public Shade Back { get; set; }
+    /// <summary>No text shadow for this line (section headers, when the theme says so).</summary>
+    public bool NoShadow { get; set; }
 
     public string Text
     {
@@ -234,6 +236,12 @@ public static class Layout
         var (open, close) = t.HeaderStyle switch
         {
             "bracket" => ("┤ ", " ├"),
+            "box" => ("╡ ", " ╞"),
+            "angle" => ("╼ ", " ╾"),
+            "diamond" => ("◆ ", " ◆"),
+            "arrow" => ("▸ ", " ◂"),
+            "chevron" => ("» ", " «"),
+            "blocks" => ("▐ ", " ▌"),
             "plain" => ("", ""),
             _ => (" ", " "),
         };
@@ -285,7 +293,16 @@ public static class Layout
                 break;
             }
             default:
-                b.Add(new string('─', n), c.Rule);
+                char ch = style switch
+                {
+                    "double" or "box" => '═',
+                    "heavy" => '━',
+                    "wave" => '∿',
+                    "diamond" => '·',
+                    "blocks" => '░',
+                    _ => '─',
+                };
+                b.Add(new string(ch, n), c.Rule);
                 break;
         }
     }

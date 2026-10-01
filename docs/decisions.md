@@ -197,3 +197,20 @@ These decisions replace older ones where they conflict (noted in brackets).
 | Z23 | **Device log:** with the debug log on, each Bluetooth device (enumerator, name, battery value or none) and each Razer HID interface (product id, name, usage page/usage, feature report size, answer per transaction id) is logged at start and when the list changes. Razer: every interface with the 91-byte feature report is asked (not only known receivers), so wired mice and unknown receivers answer too. [extends X5] | To find why a device is missing. |
 | Z24 | **Network numbers** are coloured along the graph colours by their fraction of the highest value of the last hour (30 s buckets); packet counts have their own hour peak. | Requested. |
 
+## Version 6
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| A1 | **CPU temperature** always on the cpu line (option `CpuTempAlways`). LHM values ≤ 1 °C are "not read" (LHM gives 0 without its driver, that is without admin rights); the log says when Ember is not elevated and lists the CPU temperature sensors at start. | Requested; 0 °C was shown. |
+| A2 | **Page file line** `pagefile  2.1GB / 8GB bar %` under the commit line (EnumPageFiles: all page files, in use / size), colour by the commit thresholds. Memory names in a 9-character column. | Requested: commit (62GB / 71GB) mixes RAM and page file. |
+| A3 | Projection without data: `no trend yet` (was "too early to project"). | "early" is used for "empty … early". |
+| A4 | **Kept space per section** (default): the empty lines of shrunk items go to the end of their section; options "bottom" (end of the widget) and "inline". [replaces Z21 default] | Requested. |
+| A5 | **Position after a drag:** the open settings window takes the new position into its copy (SyncPosition), so its next change does not move the widget back. | Bug: the widget jumped back to its old corner offset. |
+| A6 | **Blur clip:** besides the window region, DWM gets the rounded region with DwmEnableBlurBehindWindow, so the system blur (acrylic, blur, glass) is cut at the rounded corners. | Bug report; not checked on Windows. |
+| A7 | **Settings fields:** number and text fields apply when they lose the focus (not at each key); a note on each page says when changes apply. A new usage interval counts from the last request (no extra request). | Typing "120" applied "1" first; each change polled at once (more 429s). |
+| A8 | **Wheel in the settings window** is handled in the message loop: over the window or any of its controls it scrolls the page only (combo boxes and sliders do not change their value). | Bug report: other windows scrolled. |
+| A9 | Options: no text shadow on headers; 9 more header styles (double, heavy, box, angle, wave, diamond, arrow, chevron, blocks); value chips cover the text only (not the field padding) and have a rounding slider (0–100 %). | Requested. |
+| A10 | **Ping lines** show the pinged host instead of "isp"/"lan" (option off); option "ping always" (coloured by the thresholds). | Requested. |
+| A11 | **Claude polling:** at least 2 min (default 2 min); 429 adds 30 s up to 5 min. | The log showed a 429 for every second request at 1 min. |
+| A12 | **Less blinking** (from the decision log): threshold bands — a visible hot core stays until its load is 15 points below the hot-core load (temperatures 3 °C); GPU top process 15 points; GPU load up to 5 points; soft paging 30 %. A shown top process stays through short gaps in its samples (up to the stick time). "Secure System" is never a top process. | The log showed the same items crossing their thresholds every second. |
+

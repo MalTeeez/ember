@@ -143,7 +143,7 @@ public static class SettingsSchema
         yield return Number(G, "Position", "Offset Y (px at 100%)", -10000, 10000, s => s.Layout.OffsetY, (s, v) => s.Layout.OffsetY = (int)v);
         yield return Bool(G, "Motion", "Animate size changes", s => s.Layout.Animate, (s, v) => s.Layout.Animate = v);
         yield return Slider(G, "Motion", "Animation length (ms)", 0, 600, s => s.Layout.AnimationMs, (s, v) => s.Layout.AnimationMs = (int)v);
-        yield return Choice(G, "Motion", "Kept space goes to", new[] { "bottom", "inline" }, s => s.Layout.KeptSpace, (s, t) => s.Layout.KeptSpace = t);
+        yield return Choice(G, "Motion", "Kept space goes to", new[] { "section", "bottom", "inline" }, s => s.Layout.KeptSpace, (s, t) => s.Layout.KeptSpace = t);
         yield return Slider(G, "Motion", "Keep space of shrunk items (s)", 0, 600, s => s.Layout.HoldSeconds, (s, v) => s.Layout.HoldSeconds = v);
         yield return Slider(G, "Motion", "Keep top process at least (s)", 0, 120, s => s.Layout.ProcessStickSeconds, (s, v) => s.Layout.ProcessStickSeconds = v);
         yield return Bool(G, "Debug", "Show everything (ignore thresholds, sample data)", s => s.PreviewAll, (s, v) => s.PreviewAll = v,
@@ -164,6 +164,7 @@ public static class SettingsSchema
         yield return Action(L, "Order and items", "Import layout…", "layout.import");
         yield return Action(L, "Order and items", "Export layout…", "layout.export");
         yield return Bool(L, "Fields", "CPU temperature", s => s.Fields.CpuTemp, (s, v) => s.Fields.CpuTemp = v);
+        yield return Bool(L, "Fields", "CPU temperature always (not only when hot)", s => s.Fields.CpuTempAlways, (s, v) => s.Fields.CpuTempAlways = v);
         yield return Bool(L, "Fields", "CPU clock", s => s.Fields.CpuClock, (s, v) => s.Fields.CpuClock = v);
         yield return Bool(L, "Fields", "Clock and temperature on hot cores", s => s.Fields.CoreDetails, (s, v) => s.Fields.CoreDetails = v);
         yield return Bool(L, "Fields", "GPU temperature", s => s.Fields.GpuTemp, (s, v) => s.Fields.GpuTemp = v);
@@ -199,6 +200,8 @@ public static class SettingsSchema
         yield return Bool(A, "Row backgrounds", "Track behind bars", s => s.Theme.BarTrack, (s, v) => s.Theme.BarTrack = v);
         yield return Bool(A, "Row backgrounds", "Chips behind warning values", s => s.Theme.ValueChips, (s, v) => s.Theme.ValueChips = v);
         yield return Slider(A, "Row backgrounds", "Strength %", 0, 300, s => s.Theme.BandOpacity, (s, v) => s.Theme.BandOpacity = (int)v);
+        yield return Slider(A, "Row backgrounds", "Rounding of chips and tracks %", 0, 100, s => s.Theme.ChipRadius, (s, v) => s.Theme.ChipRadius = (int)v);
+        yield return Bool(A, "Style", "Text shadow on headers", s => s.Theme.HeaderTextShadow, (s, v) => s.Theme.HeaderTextShadow = v);
         yield return Bool(A, "Style", "Icons in headers", s => s.Theme.HeaderIcons, (s, v) => s.Theme.HeaderIcons = v);
         yield return Bool(A, "Style", "Upper-case headers", s => s.Theme.HeaderUpper, (s, v) => s.Theme.HeaderUpper = v);
         yield return Bool(A, "Style", "Bold headers", s => s.Theme.HeaderBold, (s, v) => s.Theme.HeaderBold = v);
@@ -278,7 +281,7 @@ public static class SettingsSchema
         // ── Intervals ──
         const string V = "Intervals";
         yield return Number(V, "", "Sensors (s)", 0.25, 60, s => s.Intervals.SensorSeconds, (s, v) => s.Intervals.SensorSeconds = v);
-        yield return Number(V, "", "Claude usage (s)", 60, 3600, s => s.Intervals.ClaudeSeconds, (s, v) => s.Intervals.ClaudeSeconds = v);
+        yield return Number(V, "", "Claude usage (s)", 120, 3600, s => s.Intervals.ClaudeSeconds, (s, v) => s.Intervals.ClaudeSeconds = v);
         yield return Number(V, "", "Codex usage (s)", 60, 3600, s => s.Intervals.CodexSeconds, (s, v) => s.Intervals.CodexSeconds = v);
         yield return Number(V, "", "Copilot usage (s)", 60, 3600, s => s.Intervals.CopilotSeconds, (s, v) => s.Intervals.CopilotSeconds = v);
         yield return Number(V, "", "Device batteries (s)", 10, 3600, s => s.Intervals.BatterySeconds, (s, v) => s.Intervals.BatterySeconds = v);
@@ -311,6 +314,9 @@ public static class SettingsSchema
                 return true;
             },
         };
+        yield return Bool(N, "", "Show the pinged host on ping lines", s => s.Network.ShowPingHost, (s, v) => s.Network.ShowPingHost = v);
+        yield return Bool(N, "", "Show ping always (coloured by the thresholds)", s => s.Network.PingAlways, (s, v) => s.Network.PingAlways = v,
+            "Needs the line \"Network quality (ping)\" switched on in Layout.");
 
         // ── Notes ──
         yield return new SettingField

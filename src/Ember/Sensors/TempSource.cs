@@ -71,7 +71,7 @@ internal sealed partial class TempSource : IDisposable
                     var ccds = new SortedDictionary<int, double>();
                     foreach (var sensor in hw.Sensors)
                     {
-                        if (sensor.SensorType != SensorType.Temperature || sensor.Value is not { } v) continue;
+                        if (sensor.SensorType != SensorType.Temperature || sensor.Value is not { } v || v <= 1) continue;
                         if (CoreName().IsMatch(sensor.Name)) CoreTemps.Add((sensor.Name, v));
                         else if (CcdName().Match(sensor.Name) is { Success: true } m && int.TryParse(m.Groups[1].Value, out int n))
                             ccds[n] = Math.Max(ccds.GetValueOrDefault(n), v);
@@ -103,7 +103,15 @@ internal sealed partial class TempSource : IDisposable
             _cpuEnabled = _gpuEnabled = true;
             _computer = c;
             _opened = true;
-            Log.Write("LHM opened: " + string.Join(", ", c.Hardware.Select(h => $"{h.HardwareType}:{h.Name}")));
+            bool admin = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent())
+                .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            Log.Write("LHM opened: " + string.Join(", ", c.Hardware.Select(h => $"{h.HardwareType}:{h.Name}")) +
+                (admin ? "" : " (not elevated: CPU temperatures need admin rights; start Ember elevated or with the logon task)"));
+            foreach (var hw in c.Hardware.Where(h => h.HardwareType == HardwareType.Cpu))
+            {
+                hw.Update();
+                Log.Write($"LHM {hw.Name} temperatures: " + string.Join(", ", hw.Sensors.Where(x => x.SensorType == SensorType.Temperature).Select(x => $"{x.Name}={x.Value:0.#}")));
+            }
         }
         catch (Exception ex)
         {
@@ -119,7 +127,8 @@ internal sealed partial class TempSource : IDisposable
     /// </summary>
     private static double? PackageTemp(IHardware hw)
     {
-        var temps = hw.Sensors.Where(s => s.SensorType == SensorType.Temperature && s.Value.HasValue).ToList();
+        // 0 °C (or less) = not read: LHM reports 0 when its driver could not load (no admin rights).
+        var temps = hw.Sensors.Where(s => s.SensorType == SensorType.Temperature && s.Value is > 1).ToList();
         foreach (var name in new[] { "CPU Package", "Core (Tctl/Tdie)", "Core (Tctl)", "Package", "Core (Tdie)" })
         {
             var s = temps.FirstOrDefault(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -131,7 +140,7 @@ internal sealed partial class TempSource : IDisposable
 
     private static double? GpuCoreTemp(IHardware hw)
     {
-        var temps = hw.Sensors.Where(s => s.SensorType == SensorType.Temperature && s.Value.HasValue).ToList();
+        var temps = hw.Sensors.Where(s => s.SensorType == SensorType.Temperature && s.Value is > 1).ToList();
         var core = temps.FirstOrDefault(s => s.Name.Equals("GPU Core", StringComparison.OrdinalIgnoreCase)) ?? temps.FirstOrDefault();
         return core?.Value;
     }

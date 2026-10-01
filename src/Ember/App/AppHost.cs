@@ -52,7 +52,13 @@ internal sealed partial class AppHost : Win32Window, IDisposable
 
         _widget.Settings = _settings;
         _widget.Create();
-        _widget.Moved += () => ApplySettings(_widget.Settings, save: true, fromWidget: true);
+        _widget.Moved += () =>
+        {
+            ApplySettings(_widget.Settings, save: true, fromWidget: true);
+            // The open settings window keeps its own copy: give it the new position, so its next
+            // change does not move the widget back.
+            _settingsWindow?.SyncPosition(_settings);
+        };
         WireWidget();
 
         _tray = new TrayIcon(Handle, WM_TRAY);

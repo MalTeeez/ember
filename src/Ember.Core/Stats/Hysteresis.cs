@@ -73,6 +73,9 @@ public sealed class VisibilitySet
         return vis;
     }
 
+    /// <summary>True if the key is visible now.</summary>
+    public bool IsVisible(string key) => _items.TryGetValue(key, out var h) && h.Visible;
+
     /// <summary>True if the key is visible or about to show (used to start sampling early).</summary>
     public bool IsPending(string key) => _items.TryGetValue(key, out var h) && h.Pending;
 

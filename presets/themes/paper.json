@@ -30,6 +30,8 @@
   "HeaderAlign": "left",
   "HeaderIndent": 2,
   "HeaderIcons": false,
+  "HeaderTextShadow": true,
+  "ChipRadius": 40,
   "HeaderUpper": true,
   "HeaderBold": true,
   "BoldValues": true,

@@ -187,6 +187,7 @@ internal sealed partial class AppHost
     {
         if (_settingsWindow is not { IsAlive: true } sw) return false;
         if (msg.hwnd != sw.Handle && !W.IsChild(sw.Handle, msg.hwnd)) return false;
+        if (sw.HandleWheel(ref msg)) return true;
         return W.IsDialogMessage(sw.Handle, ref msg);
     }
 

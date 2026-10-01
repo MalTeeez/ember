@@ -129,7 +129,7 @@ public class SettingsTests
         Assert.True(s.IsOn("cpu.load"));
         Assert.Equal("ember", s.Theme.Name);
         Assert.Equal(1, s.Intervals.SensorSeconds);
-        Assert.Equal(60, s.Intervals.ClaudeSeconds);
+        Assert.Equal(120, s.Intervals.ClaudeSeconds);
         Assert.Equal(75, s.Thresholds.CpuTemp.Warn);
         Assert.Equal(90, s.Thresholds.CpuTemp.Crit);
         Assert.Equal(15, s.Thresholds.AvailableRam.Warn);
