@@ -201,10 +201,15 @@ internal sealed class NoteWindow : Win32Window
                 Gdip.GdipFillRectangle(g, hb, r.Left, r.Top, r.Width, r.Height);
                 Gdip.GdipDeleteBrush(hb);
             }
-            Gdip.GdipSetSolidFillColor(brush, (i == _hover ? _c.Text : _c.Icon).ToArgb());
+            uint glyphColor = (i == _hover ? _c.Text : _c.Icon).ToArgb();
+            Gdip.GdipSetSolidFillColor(brush, glyphColor);
             string glyph = (i == 0 ? Icons.Minimize : Icons.Close).ToString();
             var gr = new RectF(r.Left, r.Top, r.Width, r.Height);
-            if (iconFont != IntPtr.Zero) Gdip.GdipDrawString(g, glyph, 1, iconFont, ref gr, lineFmt, brush);
+            if (iconFont != IntPtr.Zero)
+            {
+                if (!Gdip.DrawGlyphPath(g, brush, glyphColor, iconFam, 10 * _scale, gr, lineFmt, glyph))
+                    Gdip.GdipDrawString(g, glyph, 1, iconFont, ref gr, lineFmt, brush);
+            }
             else Gdip.GdipDrawString(g, i == 0 ? "–" : "×", 1, font, ref gr, lineFmt, brush);
         }
         if (iconFont != IntPtr.Zero) Gdip.GdipDeleteFont(iconFont);

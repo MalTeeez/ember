@@ -29,6 +29,8 @@
   "BarStyle": "braille",
   "BarGradient": false,
   "HeaderStyle": "fade",
+  "HeaderAlign": "left",
+  "HeaderIndent": 0,
   "HeaderUpper": false,
   "HeaderBold": true,
   "BoldValues": true,

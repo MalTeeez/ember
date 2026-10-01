@@ -82,11 +82,37 @@ internal static class Gdip
     [DllImport(Dll)] public static extern int GdipDrawPath(IntPtr graphics, IntPtr pen, IntPtr path);
     [DllImport(Dll)] public static extern int GdipCreatePen1(uint argb, float width, int unit, out IntPtr pen);
     [DllImport(Dll)] public static extern int GdipDeletePen(IntPtr pen);
+    [DllImport(Dll, CharSet = CharSet.Unicode)]
+    public static extern int GdipAddPathString(IntPtr path, string text, int length, IntPtr family, int style, float emSize, ref RectF layout, IntPtr format);
+    [DllImport(Dll)] public static extern int GdipSetPenLineJoin(IntPtr pen, int join);
+    public const int FillModeWinding = 1, LineJoinRound = 2;
     [DllImport(Dll)] public static extern int GdipDrawLine(IntPtr graphics, IntPtr pen, float x1, float y1, float x2, float y2);
     [DllImport(Dll)] public static extern int GdipCreateLineBrushFromRectWithAngle(ref RectF rect, uint color1, uint color2, float angle, int isAngleScalable, int wrapMode, out IntPtr brush);
     [DllImport(Dll)] public static extern int GdipSetClipRect(IntPtr graphics, float x, float y, float w, float h, int combineMode);
     [DllImport(Dll)] public static extern int GdipResetClip(IntPtr graphics);
     [DllImport(Dll)] public static extern int GdipDrawImageI(IntPtr graphics, IntPtr image, int x, int y);
+
+    /// <summary>
+    /// Draws a glyph as a filled and stroked path, so thin icon-font lines get about the weight of
+    /// the text. Returns false if the path could not be made (the caller then draws the text normally).
+    /// </summary>
+    public static bool DrawGlyphPath(IntPtr g, IntPtr brush, uint argb, IntPtr family, float emSize, RectF rect, IntPtr format, string text)
+    {
+        if (family == IntPtr.Zero || GdipCreatePath(FillModeWinding, out var path) != 0) return false;
+        try
+        {
+            if (GdipAddPathString(path, text, text.Length, family, FontStyleRegular, emSize, ref rect, format) != 0) return false;
+            GdipFillPath(g, brush, path);
+            if (GdipCreatePen1(argb, Math.Max(0.5f, emSize * 0.06f), UnitPixel, out var pen) == 0)
+            {
+                GdipSetPenLineJoin(pen, LineJoinRound);
+                GdipDrawPath(g, pen, path);
+                GdipDeletePen(pen);
+            }
+            return true;
+        }
+        finally { GdipDeletePath(path); }
+    }
 
     /// <summary>A rounded rectangle path (radius 0 = plain rectangle). Delete with GdipDeletePath.</summary>
     public static IntPtr RoundRect(float x, float y, float w, float h, float r)

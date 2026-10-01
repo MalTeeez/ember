@@ -80,7 +80,7 @@ public static class CodexUsage
             return new UsageData(primary, secondary, Array.Empty<(string, UsageWindow)>())
             {
                 ShortLabel = Label(primary?.Length, "5h"),
-                LongLabel = Label(secondary?.Length, "wk"),
+                LongLabel = Label(secondary?.Length, "week"),
             };
         }
         catch (JsonException) { return null; }
@@ -89,7 +89,7 @@ public static class CodexUsage
     private static string Label(TimeSpan? length, string fallback)
     {
         if (length is not { } l) return fallback;
-        if (Math.Abs((l - TimeSpan.FromDays(7)).TotalMinutes) < 1) return "wk";
+        if (Math.Abs((l - TimeSpan.FromDays(7)).TotalMinutes) < 1) return "week";
         if (l.TotalHours < 24) return Math.Round(l.TotalHours).ToString(CultureInfo.InvariantCulture) + "h";
         return Math.Round(l.TotalDays).ToString(CultureInfo.InvariantCulture) + "d";
     }
@@ -142,7 +142,7 @@ public static class CopilotUsage
     }
 
     /// <summary>
-    /// Premium requests as the long window ("prem", monthly); limited chat and completions quotas as extra windows.
+    /// Premium requests as the long window ("premium", monthly); limited chat and completions quotas as extra windows.
     /// Unlimited quotas are left out. Null if nothing is limited or the JSON is not valid.
     /// </summary>
     public static UsageData? Parse(string json, DateTimeOffset now)
@@ -167,7 +167,7 @@ public static class CopilotUsage
             if (Quota(snaps, "chat", reset, length) is { } chat) extra.Add(("chat", chat));
             if (Quota(snaps, "completions", reset, length) is { } code) extra.Add(("code", code));
             if (premium == null && extra.Count == 0) return null;
-            return new UsageData(null, premium, extra) { LongLabel = "prem", ModelsAlways = true };
+            return new UsageData(null, premium, extra) { LongLabel = "premium", ModelsAlways = true };
         }
         catch (JsonException) { return null; }
     }

@@ -43,12 +43,18 @@ public class ComposerTests
     public void NormalState_CpuAndNetwork()
     {
         var lines = new StatusComposer().Compose(Snap(0, clock: 4200), Cfg());
-        Assert.Equal(3, lines.Count);
-        Assert.StartsWith("cpu   23% 4.2G", lines[0].Text);
-        Assert.StartsWith("\u2193     61M   pk  61M", lines[1].Text);
-        Assert.StartsWith("\u2191    2.1M   pk 2.1M", lines[2].Text);
+        // cpu, spacer, net header, down, up
+        Assert.Equal(5, lines.Count);
+        Assert.StartsWith("cpu  4.2G", lines[0].Text);
+        Assert.DoesNotContain("%", lines[0].Text); // the graph shows the load
+        Assert.StartsWith("\u2500\u2500 net \u2500", lines[2].Text);
+        Assert.StartsWith("\u2193  61M ", lines[3].Text);
+        Assert.EndsWith(" 61M", lines[3].Text); // peak after the graph
+        Assert.StartsWith("\u2191 2.1M ", lines[4].Text);
         Assert.All(lines, l => Assert.Equal(Layout.Width, l.Length));
-        Assert.All(lines[0].Text.Substring(Layout.GraphCol, Layout.GraphChars), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
+        // Graph from after the fields to the right edge: clock (5..8), temperature slot (10..13), graph 15..31.
+        Assert.All(lines[0].Text.Substring(15), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
+        Assert.All(lines[3].Text.Substring(7, 20), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
     }
 
     [Fact]
@@ -62,13 +68,19 @@ public class ComposerTests
             var t = l.Text;
             if (t.StartsWith("DeathAdder") || t.StartsWith("WH-")) continue; // device battery lines: name, bar, %
             // A label is followed by at least one space before its value (labels are at most 4 characters).
-            if (char.IsLetterOrDigit(t[0]) || t[0] is '\u2193' or '\u2191') Assert.True(t.IndexOf(' ') is > 0 and <= 4, t);
+            if (char.IsLetterOrDigit(t[0])) Assert.True(t.IndexOf(' ') is > 0 and <= 8, t);
+            // Arrow lines: the arrow, then the 4-character value (which starts with a space or a short number).
+            if (t[0] is '\u2193' or '\u2191') Assert.Equal(' ', t[1]);
         }
     }
 
     [Fact]
     public void LoadAbove100_IsLimited()
-        => Assert.StartsWith("cpu  100%", new StatusComposer().Compose(Snap(0, load: 130), Cfg())[0].Text);
+    {
+        // No load number on the cpu line; the graph's last cell is full (not more).
+        var line = new StatusComposer().Compose(Snap(0, load: 130), Cfg())[0].Text;
+        Assert.Equal('\u28B8', line[^1]);
+    }
 
     [Fact]
     public void Temperature_ShowsAfterDelay_WithThemeGradient()
@@ -151,8 +163,8 @@ public class ComposerTests
         List<Line> lines = new();
         for (int i = 0; i <= 6; i++) lines = c.Compose(Snap(i, load: 21, cores: cores, coreTemps: temps, coreClocks: clocks), cfg);
         var core = lines.Single(l => l.Text.StartsWith("c7"));
-        Assert.StartsWith("c7   100% 5.1G  88\u00B0 ", core.Text);
-        Assert.All(core.Text.Substring(Layout.GraphCol, Layout.GraphChars), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
+        Assert.StartsWith("c7   5.1G  88\u00B0 ", core.Text);
+        Assert.All(core.Text.Substring(15), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
     }
 
     [Fact]
@@ -230,7 +242,7 @@ public class ComposerTests
     private static List<ClaudeLine> Claude() => new()
     {
         new("5h", 42, TimeSpan.FromMinutes(190), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.MaxValue, TimeSpan.FromMinutes(190))),
-        new("wk", 18, TimeSpan.FromHours(98), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(52), TimeSpan.FromHours(98))),
+        new("week", 18, TimeSpan.FromHours(98), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(52), TimeSpan.FromHours(98))),
     };
 
     [Fact]
@@ -244,10 +256,13 @@ public class ComposerTests
         Assert.EndsWith(" 42%", lines[h + 1].Text);
         // filled and empty cells differ in colour
         Assert.True(lines[h + 1].Runs.Where(r => r.Text.Contains(':')).Select(r => r.Color).Distinct().Count() >= 2);
-        Assert.StartsWith("  " + Icons.Refresh + " refresh \u00B7", lines[h + 2].Text);
-        Assert.EndsWith(" 3h10m", lines[h + 2].Text);
-        Assert.Contains("will last", lines[h + 3].Text);
-        Assert.Contains("empty 1d22h before reset", lines[h + 6].Text);
+        // Two lines per limit: bar, then refresh time and projection.
+        Assert.StartsWith(" " + Icons.Refresh + " 3h10m ", lines[h + 2].Text);
+        Assert.EndsWith("will last", lines[h + 2].Text);
+        Assert.StartsWith("week ::::", lines[h + 3].Text);
+        Assert.Equal(lines[h + 1].Text.Count(ch => ch == ':'), lines[h + 3].Text.Count(ch => ch == ':')); // same bar length
+        Assert.StartsWith(" " + Icons.Refresh + " 4d2h ", lines[h + 4].Text);
+        Assert.EndsWith("empty 1d22h early", lines[h + 4].Text);
     }
 
     [Theory]
@@ -279,7 +294,7 @@ public class ComposerTests
         List<Line> lines = new();
         for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, gpus: gpus), Cfg());
         int h = lines.FindIndex(l => l.Text.StartsWith("\u2500\u2500 gpu"));
-        Assert.StartsWith("4090  64%       71\u00B0 ", lines[h + 1].Text);
+        Assert.StartsWith("4090  64%  71\u00B0 ", lines[h + 1].Text);
         Assert.Equal(7, lines[h + 2].Pid);
     }
 

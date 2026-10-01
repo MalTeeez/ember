@@ -28,6 +28,9 @@ public sealed class StatusComposer
     private readonly HashSet<string> _usedHist = new();
     private readonly HeightKeeper _keep = new();
     private readonly Dictionary<string, StickyTop> _sticky = new();
+    private readonly DataGate _gate = new();
+    private readonly HashSet<string> _gone = new();
+    private int _usageLabelWidth = 5;
     private ThemeColors _c = ThemeColors.From(new Theme());
     private Theme? _themeRef;
     private EmberSettings _cfg = new();
@@ -36,7 +39,8 @@ public sealed class StatusComposer
     private TimeSpan _stick;
     public Needs Needs { get; } = new();
 
-    private const int HistorySamples = Layout.GraphChars * 2;
+    // Enough samples for the longest graph (from the label column to the right edge).
+    private const int HistorySamples = (Layout.Width - Layout.LabelWidth) * 2;
     private const double AdapterTrafficBps = 8_000; // 1 KB/s
 
     public ThemeColors Colors => _c;
@@ -54,6 +58,8 @@ public sealed class StatusComposer
         _hist.Clear();
         _cores.Reset();
         _keep.Clear();
+        _gate.Clear();
+        _usageLabelWidth = 5;
         foreach (var s in _sticky.Values) s.Reset();
     }
 
@@ -85,6 +91,7 @@ public sealed class StatusComposer
         _vis.HideDelay = TimeSpan.FromSeconds(cfg.Intervals.HideDelaySeconds);
         _vis.BeginTick();
         _usedHist.Clear();
+        _gone.Clear();
 
         var items = new Dictionary<string, List<Line>>();
         if (On("toolbar")) items["toolbar"] = new() { Toolbar(ctx ?? new ComposeContext()) };
@@ -93,9 +100,15 @@ public sealed class StatusComposer
         ComposeGpu(s, items);
         ComposeMemory(s, items);
         ComposeDisk(s, items);
-        ComposeUsage(s.Claude, items, "claude.5h", "claude.week", "claude.models", _c.Claude);
-        ComposeUsage(s.Codex, items, "codex.5h", "codex.week", "codex.week", _c.Codex);
-        ComposeUsage(s.Copilot, items, "copilot.premium", "copilot.premium", "copilot.other", _c.Copilot);
+        var claude = Gate("claude", s.Claude, "claude.5h", "claude.week", "claude.models");
+        var codex = Gate("codex", s.Codex, "codex.5h", "codex.week");
+        var copilot = Gate("copilot", s.Copilot, "copilot.premium", "copilot.other");
+        // One label width for all usage bars, so all bars have the same length (it only grows).
+        foreach (var l in new[] { claude, codex, copilot }.Where(u => u != null).SelectMany(u => u!))
+            _usageLabelWidth = Math.Clamp(Math.Max(_usageLabelWidth, l.Label.Length + 1), 5, 9);
+        ComposeUsage(claude, items, "claude.5h", "claude.week", "claude.models", _c.Claude);
+        ComposeUsage(codex, items, "codex.5h", "codex.week", "codex.week", _c.Codex);
+        ComposeUsage(copilot, items, "copilot.premium", "copilot.premium", "copilot.other", _c.Copilot);
         ComposeBatteries(s, items);
 
         _vis.EndTick();
@@ -117,6 +130,13 @@ public sealed class StatusComposer
         {
             var e = entries[i];
             if (e.Kind != "item" || !e.Enabled) continue;
+            if (_gone.Contains(e.Id))
+            {
+                // No data from its source: no kept space either, so the whole section goes.
+                _keep.Forget(e.Id);
+                output[i] = new List<Line>();
+                continue;
+            }
             var lines = items.GetValueOrDefault(e.Id) ?? new List<Line>();
             int h = _keep.Reserve(e.Id, lines.Count, _now, hold);
             var list = new List<Line>(lines);
@@ -176,11 +196,16 @@ public sealed class StatusComposer
 
     private LineBuilder Val(LineBuilder b, string text, Rgb? color = null) => b.Add(text, color ?? _c.Text, ValueStyle);
 
-    /// <summary>Braille graph at the graph column; each cell coloured by its value (intensity), the accent, or mono.</summary>
-    private void Graph(LineBuilder b, IReadOnlyList<double> values, double scale, Rgb accent)
+    /// <summary>
+    /// Braille graph from <paramref name="col"/> for <paramref name="chars"/> characters (default: to the right edge);
+    /// each cell coloured by its value (intensity), the accent, or mono.
+    /// </summary>
+    private void Graph(LineBuilder b, IReadOnlyList<double> values, double scale, Rgb accent, int col = Layout.GraphCol, int chars = -1)
     {
-        b.PadTo(Layout.GraphCol);
-        var (text, max) = Glyphs.Graph(values, Layout.GraphChars, scale);
+        b.PadTo(col);
+        if (chars < 0) chars = Layout.Width - b.Column;
+        if (chars <= 0) return;
+        var (text, max) = Glyphs.Graph(values, chars, scale);
         for (int i = 0; i < text.Length; i++)
             b.Add(text[i].ToString(), double.IsNaN(max[i]) ? _c.Dim : _c.GraphCell(scale > 0 ? max[i] / scale : 0, accent));
     }
@@ -232,13 +257,21 @@ public sealed class StatusComposer
 
         if (On("cpu.load"))
         {
+            // "cpu  4.8G  82° ⣀⣠⣴⣶⣿…" — no load number: the graph shows the load.
             var b = Label("cpu", _c.Cpu);
-            Val(b, Format.Pct4(load));
-            b.PadTo(Layout.F2);
-            if (f.CpuClock && cpu.ClockMHz is { } clk) b.Add(Format.Clock4(clk), _c.Unit);
-            b.PadTo(Layout.F3);
-            if (tempVis) Val(b, Format.Temp4(cpu.Temp!.Value), _c.Severity(cpu.Temp.Value, t.CpuTemp.Warn, t.CpuTemp.Crit));
-            Graph(b, h.Values, 100, _c.Cpu);
+            int col = Layout.F1;
+            if (f.CpuClock)
+            {
+                if (cpu.ClockMHz is { } clk) b.Add(Format.Clock4(clk), _c.Unit);
+                col += Layout.FieldWidth + 1;
+            }
+            if (f.CpuTemp)
+            {
+                b.PadTo(col);
+                if (tempVis) Val(b, Format.Temp4(cpu.Temp!.Value), _c.Severity(cpu.Temp.Value, t.CpuTemp.Warn, t.CpuTemp.Crit));
+                col += Layout.FieldWidth + 1;
+            }
+            Graph(b, h.Values, 100, _c.Cpu, col);
             items["cpu.load"] = new() { b.Build() };
         }
 
@@ -298,8 +331,9 @@ public sealed class StatusComposer
     }
 
     /// <summary>
-    /// Hot cores in 1, 2 or 3 columns (at most 3 rows), btop style. More than 9 cores: the best 9 by
-    /// score, and one line "n hot cores hidden, at y%" (one fully used core = 100 %).
+    /// Hot cores in 1, 2 or 3 columns (at most 3 rows), btop style, without load numbers (the graphs
+    /// show the load). More than 9 cores: the best 9 by score, and one line "n hot cores hidden, at y%"
+    /// (one fully used core = 100 %).
     /// </summary>
     private List<Line> CoreGridLines(List<HotCore> hot, bool details)
     {
@@ -308,6 +342,7 @@ public sealed class StatusComposer
         var (shown, hidden) = CoreGrid.Select(hot);
         int cols = CoreGrid.Columns(shown.Count);
         int rows = (shown.Count + cols - 1) / cols;
+        int cell = (Layout.Width - (cols - 1)) / cols; // 1 column: 32, 2: 15, 3: 10
         for (int r = 0; r < rows; r++)
         {
             if (cols == 1)
@@ -320,15 +355,15 @@ public sealed class StatusComposer
             {
                 int k = r + c * rows; // fill column by column, so numbers read top to bottom
                 if (k >= shown.Count) break;
-                if (c > 0) b.PadTo(c * (cols == 2 ? 16 : 11));
-                CoreCell(b, shown[k], cols, details);
+                b.PadTo(c * (cell + 1));
+                CoreCell(b, shown[k], cell, cols == 2 && details);
             }
             lines.Add(b.Build());
         }
         if (hidden.Count > 0)
         {
             var b = new LineBuilder();
-            b.Add("  ", _c.Dim).Add($"{hidden.Count} hot cores hidden, at ", _c.Unit);
+            b.Add(" ", _c.Dim).Add($"{hidden.Count} hot cores hidden, at ", _c.Unit);
             Val(b, Format.Int(CoreGrid.CoreSum(hidden)) + "%");
             lines.Add(b.Build());
         }
@@ -341,39 +376,37 @@ public sealed class StatusComposer
         return double.IsNaN(temp) ? _c.Label : _c.Severity(temp, t.CpuTemp.Warn, t.CpuTemp.Crit, _c.Label);
     }
 
-    /// <summary>One column: "c7   95% 4.8G  82° ⣀⣠⣴⣶⣿⣿…" — load, clock, temperature, braille graph.</summary>
+    /// <summary>One column, like the cpu line: "c7   4.8G  82° ⣀⣠⣴⣶⣿⣿…" — clock, temperature, braille graph.</summary>
     private Line CoreLine(HotCore core, bool details)
     {
         var t = _cfg.Thresholds;
         var b = Label("c" + core.Index, TempColor(core.Temp));
-        Val(b, Format.Pct4(core.Load));
+        int col = Layout.F1;
         if (details)
         {
-            b.PadTo(Layout.F2);
             if (core.ClockMHz > 0) b.Add(Format.Clock4(core.ClockMHz), _c.Unit);
-            b.PadTo(Layout.F3);
+            b.PadTo(col += Layout.FieldWidth + 1);
             if (!double.IsNaN(core.Temp)) Val(b, Format.Temp4(core.Temp), _c.Severity(core.Temp, t.CpuTemp.Warn, t.CpuTemp.Crit));
+            col += Layout.FieldWidth + 1;
         }
-        Graph(b, Hist("core." + core.Index).Values, 100, _c.Cpu);
+        Graph(b, Hist("core." + core.Index).Values, 100, _c.Cpu, col);
         return b.Build();
     }
 
     /// <summary>
-    /// Grid cell. 2 columns (16 wide): "c7  ⣴⣶⣿ 95% 82° "; 3 columns (10 wide + 1 gap): "c7  ⣶⣿ 95%".
-    /// The label colour shows the temperature (normal → warning → critical).
+    /// Grid cell of <paramref name="width"/> characters: "c7  ⣴⣶⣿⣿⣿⣿ 82°" (2 columns, with temperature) or
+    /// "c7  ⣶⣿⣿⣿⣿⣿" (3 columns). The label colour shows the temperature (normal → warning → critical).
     /// </summary>
-    private void CoreCell(LineBuilder b, HotCore core, int cols, bool details)
+    private void CoreCell(LineBuilder b, HotCore core, int width, bool temp)
     {
         var t = _cfg.Thresholds;
+        int start = b.Column;
         string label = "c" + core.Index;
-        b.Add(label.Length > 3 ? label[..3] : label.PadRight(3), TempColor(core.Temp)).Add(" ", _c.Dim);
-        int graphChars = cols == 2 ? 3 : 2;
-        var (text, max) = Glyphs.Graph(Hist("core." + core.Index).Values, graphChars, 100);
-        for (int i = 0; i < text.Length; i++)
-            b.Add(text[i].ToString(), double.IsNaN(max[i]) ? _c.Dim : _c.GraphCell(max[i] / 100, _c.Cpu));
-        Val(b, Format.Pct4(core.Load));
-        if (cols == 2 && details && !double.IsNaN(core.Temp))
-            Val(b, Format.Temp4(core.Temp), _c.Severity(core.Temp, t.CpuTemp.Warn, t.CpuTemp.Crit));
+        b.Add(label.Length > 3 ? label[..3] : label, TempColor(core.Temp)).PadTo(start + 4);
+        bool showTemp = temp && !double.IsNaN(core.Temp);
+        int graphChars = width - 4 - (temp ? Layout.FieldWidth : 0);
+        Graph(b, Hist("core." + core.Index).Values, 100, _c.Cpu, start + 4, graphChars);
+        if (showTemp) Val(b, Format.Temp4(core.Temp), _c.Severity(core.Temp, t.CpuTemp.Warn, t.CpuTemp.Crit));
     }
 
     // ───────────── Network ─────────────
@@ -434,15 +467,16 @@ public sealed class StatusComposer
         return b.Build();
     }
 
-    /// <summary>"↓     61M   pk  98M ⣀⣠⣤…" — value, peak of the graph window, graph scaled to the peak.</summary>
+    /// <summary>"↓  61M ⣀⣠⣤⣴⣶⣿… 98M" — value, graph scaled to the peak, then the peak of the graph window.</summary>
     private Line NetLine(string arrow, double bps, History h, Rgb accent, bool bytes)
     {
         double peak = Math.Max(h.Max, bps);
-        var b = Label(arrow, accent);
+        var b = new LineBuilder();
+        b.Add(arrow + " ", accent);
         Val(b, Format.Rate4(bps, bytes));
-        b.PadTo(Layout.F2).Add("  pk", _c.Unit);
-        b.PadTo(Layout.F3).Add(Format.Rate4(peak, bytes), _c.Unit);
-        Graph(b, h.Values, peak <= 0 ? 1 : peak, accent);
+        int col = 2 + Layout.FieldWidth + 1;
+        Graph(b, h.Values, peak <= 0 ? 1 : peak, accent, col, Layout.Width - col - Layout.FieldWidth - 1);
+        b.Add(" ", _c.Dim).Add(Format.Rate4(peak, bytes), _c.Unit);
         return b.Build();
     }
 
@@ -466,11 +500,17 @@ public sealed class StatusComposer
             bool tempVis = _cfg.Fields.GpuTemp && g.Temp is { } tc && Vis(key + ".temp", t.GpuTemp.Crossed(tc));
             if (On("gpu.load") && (loadVis || tempVis))
             {
+                // "4090  95%  72° ⣀⣠⣴⣶⣿…"
                 var b = Label(labels[i], _c.Gpu);
                 if (loadVis) Val(b, Format.Pct4(g.Load!.Value));
-                b.PadTo(Layout.F3);
-                if (tempVis) Val(b, Format.Temp4(g.Temp!.Value), _c.Severity(g.Temp.Value, t.GpuTemp.Warn, t.GpuTemp.Crit));
-                if (loadVis) Graph(b, Hist(key).Values, 100, _c.Gpu);
+                int col = Layout.F2;
+                if (_cfg.Fields.GpuTemp)
+                {
+                    b.PadTo(col);
+                    if (tempVis) Val(b, Format.Temp4(g.Temp!.Value), _c.Severity(g.Temp.Value, t.GpuTemp.Warn, t.GpuTemp.Crit));
+                    col += Layout.FieldWidth + 1;
+                }
+                if (loadVis) Graph(b, Hist(key).Values, 100, _c.Gpu, col);
                 loadLines.Add(b.Build());
             }
 
@@ -614,7 +654,19 @@ public sealed class StatusComposer
         }
     }
 
-    // ───────────── Claude ─────────────
+    // ───────────── Usage (Claude, Codex, Copilot) ─────────────
+
+    /// <summary>
+    /// The usage lines if the source has data. Without data its items are "gone": they and their
+    /// section header hide at once, and stay hidden for a minute after a loss (<see cref="DataGate"/>).
+    /// </summary>
+    private IReadOnlyList<ClaudeLine>? Gate(string source, IReadOnlyList<ClaudeLine>? usage, params string[] ids)
+    {
+        bool has = usage is { Count: > 0 };
+        if (_preview || _gate.Update(source, has, _now)) return usage;
+        foreach (var id in ids) _gone.Add(id);
+        return null;
+    }
 
     /// <summary>Usage limits of one provider (Claude, Codex, Copilot): short, long and extra windows to their layout items.</summary>
     private void ComposeUsage(IReadOnlyList<ClaudeLine>? usage, Dictionary<string, List<Line>> items, string shortId, string longId, string extraId, Rgb accent)
@@ -627,7 +679,7 @@ public sealed class StatusComposer
             string id = c.ResolvedKind switch { UsageKind.Short => shortId, UsageKind.Long => longId, _ => extraId };
             if (!On(id)) continue;
             if (!items.TryGetValue(id, out var list)) items[id] = list = new();
-            list.AddRange(ClaudeLines(c, proj, projection, accent));
+            list.AddRange(ClaudeLines(c, proj, projection, accent, _usageLabelWidth));
         }
     }
 
@@ -658,16 +710,19 @@ public sealed class StatusComposer
     }
 
     /// <summary>
-    /// "5h   ::::::::::::::::::::::  42%"
-    /// "  ↻ refresh ············ 3h10m"
-    /// "  ◷ will last"  or  "  ⚠ empty 1d22h before reset"
+    /// Two lines per limit:
+    /// "week  :::::::::::::::::::::  71%"
+    /// " ↻ 2d22h  ⚠ empty 1d22h early"   (or "◷ will last", "⚠ empty 9h before reset" when it fits)
+    /// The label column is <paramref name="labelWidth"/> wide, so bars of all rows have the same length.
     /// </summary>
-    public IEnumerable<Line> ClaudeLines(ClaudeLine c, Threshold projection, bool showProjection = true, Rgb? accentColor = null)
+    public IEnumerable<Line> ClaudeLines(ClaudeLine c, Threshold projection, bool showProjection = true, Rgb? accentColor = null, int labelWidth = Layout.LabelWidth)
     {
         var accent = accentColor ?? _c.Claude;
-        const int barWidth = 22;
         var theme = _c.Theme;
-        var b = Label(c.Label, accent);
+        labelWidth = Math.Clamp(labelWidth, 3, 12);
+        int barWidth = Layout.Width - labelWidth - 1 - Layout.FieldWidth;
+        var b = new LineBuilder();
+        b.Add(c.Label.Length >= labelWidth ? c.Label[..(labelWidth - 1)] : c.Label, accent).PadTo(labelWidth);
         var (bar, filled) = Glyphs.StyledBar(c.Used / 100.0, barWidth, theme.BarStyle);
         for (int i = 0; i < bar.Length; i++)
         {
@@ -679,39 +734,43 @@ public sealed class StatusComposer
         Val(b, Format.Pct4(c.Used));
         yield return b.Build();
 
+        var r = new LineBuilder();
+        r.Add(" ", _c.Dim);
         if (c.ResetIn is { } reset)
         {
-            var r = new LineBuilder();
-            r.Add("  ", _c.Dim).Icon(Icons.Refresh, _c.Icon).Add("refresh ", _c.Unit);
-            string d = Format.Duration(reset);
-            while (r.Column < Layout.Width - d.Length - 1) r.Add("·", _c.Dim);
-            r.Add(" ", _c.Dim);
-            Val(r, d);
-            yield return r.Build();
+            r.Icon(Icons.Refresh, _c.Icon);
+            Val(r, Format.Duration(reset));
         }
+        if (showProjection) Projection(r, c.Projection, projection);
+        if (r.Column > 1) yield return r.Build();
+    }
 
-        if (!showProjection) yield break;
-        var p = c.Projection;
-        var l = new LineBuilder();
-        l.Add("  ", _c.Dim);
+    /// <summary>The projection, right-aligned after the refresh time (short wording when the long one does not fit).</summary>
+    private void Projection(LineBuilder r, ProjectionResult p, Threshold projection)
+    {
+        Run[] runs;
         switch (p.Kind)
         {
             case ProjectionKind.Lasts:
-                l.Icon(Icons.Clock, _c.Icon).Add("will last", _c.Unit);
+                runs = new[] { new Run(Icons.Clock + " ", _c.Icon, RunStyle.Icon), new Run("will last", _c.Unit) };
                 break;
             case ProjectionKind.Limit:
             {
                 var color = _c.Severity(p.Ratio, projection.Warn, projection.Crit);
-                var empty = p.TimeToReset - p.TimeToLimit;
-                l.Icon(Icons.Warning, color).Add("empty ", color);
-                Val(l, Format.Duration(empty), color);
-                l.Add(" before reset", color);
+                string d = Format.Duration(p.TimeToReset - p.TimeToLimit);
+                runs = new[]
+                {
+                    new Run(Icons.Warning + " ", color, RunStyle.Icon), new Run("empty ", color),
+                    new Run(d, color, ValueStyle), new Run(" before reset", color),
+                };
+                if (r.Column + 2 + LineBuilder.Len(runs) > Layout.Width) runs[3] = new Run(" early", color);
                 break;
             }
             default:
-                l.Icon(Icons.Clock, _c.Dim).Add("too early to project", _c.Dim);
+                runs = new[] { new Run(Icons.Clock + " ", _c.Dim, RunStyle.Icon), new Run("too early to project", _c.Dim) };
+                if (r.Column + 2 + LineBuilder.Len(runs) > Layout.Width) runs[1] = new Run("too early", _c.Dim);
                 break;
         }
-        yield return l.Build();
+        r.Right(runs);
     }
 }

@@ -47,6 +47,10 @@ public sealed class Theme
 
     /// <summary>Header style: rule, spaced, plain, bracket, dots, fade.</summary>
     public string HeaderStyle { get; set; } = "rule";
+    /// <summary>Header title position: left, center, right.</summary>
+    public string HeaderAlign { get; set; } = "left";
+    /// <summary>Rule characters before a left title (after a right title); 0 = title at the edge.</summary>
+    public int HeaderIndent { get; set; } = 2;
     public bool HeaderUpper { get; set; } = false;
     public bool HeaderBold { get; set; } = true;
     public bool BoldValues { get; set; } = true;
@@ -157,6 +161,8 @@ public static class ThemeStore
             if (t == null) return null;
             t.Background ??= new BackgroundTheme();
             t.GraphStops ??= new();
+            t.HeaderAlign = HeaderAligns.Contains(t.HeaderAlign) ? t.HeaderAlign : "left";
+            t.HeaderIndent = Math.Clamp(t.HeaderIndent, 0, 24);
             return t;
         }
         catch (JsonException) { return null; }
@@ -164,6 +170,7 @@ public static class ThemeStore
 
     public static readonly string[] BackgroundKinds = { "none", "solid", "gradient", "acrylic", "blur", "panel", "glass" };
     public static readonly string[] HeaderStyles = { "rule", "spaced", "plain", "bracket", "dots", "fade" };
+    public static readonly string[] HeaderAligns = { "left", "center", "right" };
     public static readonly string[] BarStyles = { "colons", "squares", "pips", "braille", "line", "shade", "blocks" };
     public static readonly string[] GraphColorings = { "intensity", "category", "mono" };
 
@@ -195,7 +202,7 @@ public static class ThemeStore
         Warn = "#FFB000", Crit = "#FF453A",
         Cpu = "#E8E8E8", NetDown = "#E8E8E8", NetUp = "#E8E8E8", Gpu = "#E8E8E8", Memory = "#E8E8E8", Disk = "#E8E8E8", Claude = "#E8E8E8", Process = "#E8E8E8",
         GraphColoring = "mono", GraphStops = new() { "#E8E8E8" },
-        BarStyle = "blocks", HeaderStyle = "spaced", HeaderUpper = true, HeaderBold = false, BoldValues = false,
+        BarStyle = "blocks", HeaderStyle = "spaced", HeaderIndent = 1, HeaderUpper = true, HeaderBold = false, BoldValues = false,
         Background = new BackgroundTheme { Kind = "none", Opacity = 0, CornerRadius = 0, BorderOpacity = 0, Padding = 6, TextShadow = true },
     };
 
@@ -207,7 +214,7 @@ public static class ThemeStore
         Warn = "#EBCB8B", Crit = "#BF616A",
         Cpu = "#88C0D0", NetDown = "#A3BE8C", NetUp = "#B48EAD", Gpu = "#8FBCBB", Memory = "#81A1C1", Disk = "#EBCB8B", Claude = "#D08770", Process = "#E5E9F0",
         GraphColoring = "intensity", GraphStops = new() { "#5E81AC", "#88C0D0", "#EBCB8B", "#BF616A" },
-        BarStyle = "pips", HeaderStyle = "plain",
+        BarStyle = "pips", HeaderStyle = "plain", HeaderIndent = 0,
         Background = new BackgroundTheme { Kind = "blur", Color = "#2E3440", Opacity = 62, CornerRadius = 10, Border = "#88C0D0", BorderOpacity = 18, Padding = 10 },
     };
 
@@ -219,7 +226,7 @@ public static class ThemeStore
         Warn = "#F1FA8C", Crit = "#FF5555",
         Cpu = "#FF79C6", NetDown = "#8BE9FD", NetUp = "#50FA7B", Gpu = "#BD93F9", Memory = "#8BE9FD", Disk = "#F1FA8C", Claude = "#FFB86C", Process = "#F8F8F2",
         GraphColoring = "intensity", GraphStops = new() { "#8BE9FD", "#BD93F9", "#FF79C6" },
-        BarStyle = "line", BarGradient = true, HeaderStyle = "dots",
+        BarStyle = "line", BarGradient = true, HeaderStyle = "dots", HeaderIndent = 0,
         Background = new BackgroundTheme { Kind = "gradient", Color = "#1B1530", Color2 = "#08080C", Opacity = 82, CornerRadius = 14, Border = "#BD93F9", BorderOpacity = 14, GradientAngle = 60, Padding = 12 },
     };
 
@@ -231,7 +238,7 @@ public static class ThemeStore
         Warn = "#FFC94D", Crit = "#FF6B6B",
         Cpu = "#7CC4FF", NetDown = "#7CF0C8", NetUp = "#FFB27C", Gpu = "#C9A7FF", Memory = "#7CC4FF", Disk = "#FFE07C", Claude = "#FFB27C", Process = "#FFFFFF",
         GraphColoring = "category", GraphStops = new() { "#7CC4FF", "#FFC94D", "#FF6B6B" },
-        BarStyle = "braille", HeaderStyle = "fade",
+        BarStyle = "braille", HeaderStyle = "fade", HeaderIndent = 0,
         Background = new BackgroundTheme { Kind = "glass", Color = "#1C2230", Color2 = "#FFFFFF", Opacity = 40, CornerRadius = 16, Border = "#FFFFFF", BorderOpacity = 22, Padding = 12, TextShadow = true },
     };
 }

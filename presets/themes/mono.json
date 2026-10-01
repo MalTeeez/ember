@@ -27,6 +27,8 @@
   "BarStyle": "blocks",
   "BarGradient": false,
   "HeaderStyle": "spaced",
+  "HeaderAlign": "left",
+  "HeaderIndent": 1,
   "HeaderUpper": true,
   "HeaderBold": false,
   "BoldValues": false,

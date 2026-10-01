@@ -32,6 +32,20 @@
       "Collapse": true
     },
     {
+      "Kind": "spacer",
+      "Id": "spacer",
+      "Enabled": true,
+      "Preset": "blank",
+      "Collapse": true
+    },
+    {
+      "Kind": "header",
+      "Id": "header",
+      "Enabled": true,
+      "Text": "net",
+      "Collapse": true
+    },
+    {
       "Kind": "item",
       "Id": "net.down",
       "Enabled": true,

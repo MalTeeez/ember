@@ -30,6 +30,8 @@
   "BarStyle": "pips",
   "BarGradient": false,
   "HeaderStyle": "plain",
+  "HeaderAlign": "left",
+  "HeaderIndent": 0,
   "HeaderUpper": false,
   "HeaderBold": true,
   "BoldValues": true,

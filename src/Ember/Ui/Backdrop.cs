@@ -23,8 +23,9 @@ internal static class Backdrop
             "blur" or "glass" => W.ACCENT_ENABLE_BLURBEHIND,
             _ => W.ACCENT_DISABLED,
         };
-        // Acrylic tint is AABBGGRR; it needs alpha > 0.
-        byte a = (byte)Math.Clamp(bg.Opacity * 255 / 100, 1, 255);
+        // Acrylic tint is AABBGGRR; it needs alpha > 0. The tint stays light: the opacity slider
+        // controls the colour layer that Paint draws over the blur (so it changes the real opacity).
+        const byte a = 0x18;
         var accent = new ACCENT_POLICY { AccentState = state, AccentFlags = state == W.ACCENT_ENABLE_ACRYLICBLURBEHIND ? 2 : 0, GradientColor = ((uint)a << 24) | tint.ToColorRef() };
         int size = Marshal.SizeOf<ACCENT_POLICY>();
         IntPtr p = Marshal.AllocHGlobal(size);
@@ -36,6 +37,17 @@ internal static class Backdrop
         }
         catch (EntryPointNotFoundException) { }
         finally { Marshal.FreeHGlobal(p); }
+
+        // No system shadow or square corners from DWM (Windows 11 draws them for blurred windows).
+        int policy = W.DWMNCRP_DISABLED;
+        int corner = bg.CornerRadius > 0 ? (bg.CornerRadius <= 4 ? W.DWMWCP_ROUNDSMALL : W.DWMWCP_ROUND) : W.DWMWCP_DONOTROUND;
+        try
+        {
+            W.DwmSetWindowAttribute(hwnd, W.DWMWA_NCRENDERING_POLICY, ref policy, sizeof(int));
+            W.DwmSetWindowAttribute(hwnd, W.DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
+        }
+        catch (DllNotFoundException) { }
+        catch (EntryPointNotFoundException) { }
 
         if (state != W.ACCENT_DISABLED && width > 0 && height > 0)
         {
@@ -71,11 +83,10 @@ internal static class Backdrop
                 break;
             }
             case "acrylic":
-                // The tint comes from the accent; a very light fill keeps the whole area hit-testable in edit mode.
-                Gdip.FillRoundRect(g, c1.ToArgb(4), 0, 0, w, h, r);
-                break;
             case "blur":
-                Gdip.FillRoundRect(g, c1.ToArgb(a), 0, 0, w, h, r);
+                // Colour layer over the system blur: the opacity slider sets it (at least 4, so the
+                // whole area stays hit-testable in edit mode).
+                Gdip.FillRoundRect(g, c1.ToArgb(Math.Max(a, (byte)4)), 0, 0, w, h, r);
                 break;
             case "glass":
             {

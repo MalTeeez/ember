@@ -117,7 +117,7 @@ public class FiveHourRateTests
         var now = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
         t.Update(data, now);
         var lines = t.Lines(now);
-        Assert.Equal(new[] { "5h", "wk", "op" }, lines.Select(l => l.Label));
+        Assert.Equal(new[] { "5h", "week", "opus" }, lines.Select(l => l.Label));
         Assert.Equal(TimeSpan.FromMinutes(190), lines[0].ResetIn);
         t.Fail();
         Assert.Empty(t.Lines(now));

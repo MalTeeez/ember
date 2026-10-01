@@ -145,3 +145,25 @@ These decisions replace older ones where they conflict (noted in brackets).
 | X5 | **Razer receivers:** HID interfaces of vendor 1532 with a 91-byte feature report (report id + 90 bytes) and a known receiver id (DeathAdder V3 HyperSpeed 00C5) or a product name with HyperSpeed/Wireless/Receiver/Dongle. Battery = class 0x07 command 0x80, charging 0x84; transaction ids 0x1F, 0xFF, 0x3F are tried and the answering one is kept. Queried every second battery tick (default 120 s). | OpenRazer/Synapse protocol; few queries so Synapse is not disturbed. |
 | X6 | Device battery lines are always shown by default (option: only when low); thresholds warning 30 %, critical 15 % (lower is worse). | The user asked to see the remaining battery. |
 | X7 | Older settings files: items that did not exist yet are added as in the default layout (on, with their section header). Imported layout files: missing items are added switched off. | New features show after an update; an imported layout stays as its author made it. |
+
+## Version 4: layout and look fixes
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| Y1 | The default layout has a **net** section header. Settings of an older layout version get the header (with a spacer) before the first network item, once (`LayoutVersion` 2). | Requested. |
+| Y2 | **CPU line and hot cores** show no load number (the graph shows it); only the "n hot cores hidden, at y%" line has a number. Graphs start right after the fields and go to the right edge (cpu: 17 cells; one-column cores: 17; two columns: 7 + temperature; three columns: 6). History keeps 54 samples. [replaces V6 layout] | Requested; better use of the width. |
+| Y3 | **Network lines:** `↓  61M ⣀⣠… 98M`: arrow, value, graph (20 cells), peak of the graph window after the graph. [replaces the `pk` field] | Requested. |
+| Y4 | **GPU line:** `4090  77%  85° graph`: load, temperature slot (when the GPU temperature field is on), graph to the right edge. | Same structure as the CPU line. |
+| Y5 | **Usage labels** are words, not abbreviations: `5h`, `week`, `opus`, `sonnet`, `premium`, `chat`, `code` (at most 8 characters). One label column width for all usage rows (Claude, Codex, Copilot), from the longest label seen; it only grows. So all bars have the same length. [replaces C2 labels] | Requested. |
+| Y6 | **Usage block: 2 lines** per limit. Line 1: label, bar, %. Line 2 (indent 1): `↻ <time to reset>`, and the projection right-aligned: `◷ will last`, `⚠ empty 1d22h before reset` (or `… early` when it does not fit), `◷ too early to project` (or `too early`). [replaces V12] | Requested. |
+| Y7 | **Missing usage data:** when a source (Claude, Codex, Copilot) has no data, its items give no lines and keep no space, so the header hides too. After a loss of data, the section stays hidden for at least 1 min, even if data comes back sooner. | Requested: no empty section. |
+| Y8 | **Header alignment** (left, center, right) and **indent** (rule characters before a left title or after a right title; 0 = at the edge). Built-in themes keep their look (ember/btop 2, mono 1, nord/dusk/glass 0). | Requested. |
+| Y9 | **GPU duplicates:** DXGI adapters with the same name, vendor, device, subsystem and VRAM are one GPU; only the one with load or VRAM use is kept (the first if none is active; all if several are active = real twin GPUs). Twin GPUs: the first keeps the model label, others get `#n` (`40#2`). [replaces V13 numbering] | A GPU listed twice showed as "4091". |
+| Y10 | **Acrylic opacity:** the accent tint is fixed and light; the opacity slider sets a colour layer painted over the blur (as for "blur"). | The slider changed only the tint influence. |
+| Y11 | **Rounded corners:** DWM non-client rendering is off for the widget and the DWM corner preference follows the corner radius (Windows 11), so no square shadow shows behind a rounded window. | Requested; not checked on Windows. |
+| Y12 | **No tooltips while dragging** the widget: tooltips hide on mouse down in the drag area and stay off until the cursor goes to another hit. | Requested. |
+| Y13 | **Icons** are drawn as glyph paths, filled and stroked (stroke ≈ 6 % of the font size, round joins), in the widget and the note title bar. | Requested thicker icons, near the font weight. |
+| Y14 | **Settings scrolling:** drawing is off while all controls move, then the window and controls redraw once. | Fixes tearing, mostly when scrolling up. |
+| Y15 | **Preset lists** show the chosen theme/layout name (`Theme.Name`, `LayoutName`); an empty entry stays for "keep as is". | Requested. |
+| Y16 | **Open log:** tray menu and Settings → General → Debug (with Open settings file and Open data folder). Opens with the default program (Notepad if none); makes a short log first if none exists. | Requested. |
+

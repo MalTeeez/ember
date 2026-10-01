@@ -87,7 +87,8 @@ internal sealed partial class Sampler
         }
 
         var result = new List<GpuData>();
-        foreach (var a in _adapters)
+        foreach (var a in GpuDedupe.Select(_adapters, a => (a.Name, a.VendorId, a.DeviceId, a.SubSysId, a.DedicatedVideoMemory),
+                     a => (loads?.GetValueOrDefault(a.Luid)?.Load ?? 0) > 0 || (vram?.GetValueOrDefault(a.Luid) ?? 0) > 0))
         {
             GpuAdapterLoad? load = loads?.GetValueOrDefault(a.Luid);
             // No engine instance for an adapter with a counter = idle (0 %).

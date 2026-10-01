@@ -158,7 +158,7 @@ internal sealed class SettingsWindow : Win32Window
             if (page == 0)
             {
                 y += S(10);
-                Static("Changes apply at once. File: " + Paths.Settings, left, y, width, S(36), page);
+                Static("Changes apply at once.", left, y, width, S(36), page);
                 y += S(40);
             }
             _pageHeights[page] = y + S(10);
@@ -377,6 +377,9 @@ internal sealed class SettingsWindow : Win32Window
         {
             switch (action)
             {
+                case "app.openlog": Paths.OpenLog(); break;
+                case "app.opensettings": Paths.Open(Paths.Settings); break;
+                case "app.openfolder": Paths.Open(Paths.AppData); break;
                 case "theme.export":
                     if (Dialogs.SaveJson(Handle, "Export theme", "ember-theme-" + _work.Theme.Name + ".json") is { } tp)
                         File.WriteAllText(tp, ThemeStore.Serialize(_work.Theme));
@@ -433,7 +436,10 @@ internal sealed class SettingsWindow : Win32Window
         W.InvalidateRect(Handle, IntPtr.Zero, true);
     }
 
-    /// <summary>Moves the controls of the page to their base position minus the scroll offset.</summary>
+    /// <summary>
+    /// Moves the controls of the page to their base position minus the scroll offset. Drawing is off
+    /// while they move, then the window and all controls are drawn once (no tearing while scrolling).
+    /// </summary>
     private void Reposition()
     {
         void Move(IntPtr h, int baseY)
@@ -441,12 +447,22 @@ internal sealed class SettingsWindow : Win32Window
             if (!W.GetWindowRect(h, out var r)) return;
             var p = new POINT(r.Left, r.Top);
             W.ScreenToClient(Handle, ref p);
-            W.SetWindowPos(h, IntPtr.Zero, p.X, baseY - _scroll, 0, 0, W.SWP_NOSIZE | W.SWP_NOZORDER | W.SWP_NOACTIVATE);
+            if (p.Y == baseY - _scroll) return;
+            W.SetWindowPos(h, IntPtr.Zero, p.X, baseY - _scroll, 0, 0,
+                W.SWP_NOSIZE | W.SWP_NOZORDER | W.SWP_NOACTIVATE | W.SWP_NOREDRAW | W.SWP_NOCOPYBITS);
         }
-        foreach (var r in _rows.Where(r => r.Page == _page))
-            foreach (var (h, y) in r.Hwnds) Move(h, y);
-        foreach (var (h, y, p) in _statics.Where(s => s.Page == _page)) Move(h, y);
-        W.InvalidateRect(Handle, IntPtr.Zero, true);
+        W.SendMessage(Handle, W.WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+        try
+        {
+            foreach (var r in _rows.Where(r => r.Page == _page))
+                foreach (var (h, y) in r.Hwnds) Move(h, y);
+            foreach (var (h, y, p) in _statics.Where(s => s.Page == _page)) Move(h, y);
+        }
+        finally
+        {
+            W.SendMessage(Handle, W.WM_SETREDRAW, (IntPtr)1, IntPtr.Zero);
+            W.RedrawWindow(Handle, IntPtr.Zero, IntPtr.Zero, W.RDW_INVALIDATE | W.RDW_ERASE | W.RDW_ALLCHILDREN | W.RDW_UPDATENOW);
+        }
     }
 
     private void UpdateScrollBar()

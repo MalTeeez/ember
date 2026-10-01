@@ -188,49 +188,70 @@ public static class Layout
 
     public static Line Blank(bool padding = false) => new LineBuilder(Width, padding).Build();
 
-    /// <summary>Section header in the theme's header style.</summary>
+    /// <summary>
+    /// Section header in the theme's header style, aligned left, center or right. On the left (right),
+    /// <see cref="Theme.HeaderIndent"/> rule characters come before (after) the title.
+    /// </summary>
     public static Line Header(string name, ThemeColors c)
     {
         var t = c.Theme;
-        bool bold = t.HeaderBold;
-        var hs = bold ? RunStyle.Bold : RunStyle.None;
+        var hs = t.HeaderBold ? RunStyle.Bold : RunStyle.None;
         string title = t.HeaderUpper ? name.ToUpperInvariant() : name.ToLowerInvariant();
-        var b = new LineBuilder();
-        switch (t.HeaderStyle)
+        if (t.HeaderStyle == "spaced") title = string.Join(' ', title.ToCharArray());
+        // Decoration around the title (rule colour) and the fill on both sides.
+        var (open, close) = t.HeaderStyle switch
         {
-            case "spaced":
-                b.Add("─ ", c.Rule).Add(string.Join(' ', title.ToCharArray()), c.Header, hs).Add(" ", c.Rule);
-                Fill(b, '─', c.Rule);
-                break;
-            case "plain":
-                b.Add(title, c.Header, hs);
-                break;
-            case "bracket":
-                b.Add("──┤ ", c.Rule).Add(title, c.Header, hs).Add(" ├", c.Rule);
-                Fill(b, '─', c.Rule);
-                break;
-            case "dots":
-                b.Add(title, c.Header, hs).Add(" ", c.Rule);
-                while (b.Column < Width) b.Add(b.Column % 2 == 0 ? "·" : " ", c.Rule);
-                break;
-            case "fade":
-            {
-                b.Add(title, c.Header, hs).Add(" ", c.Rule);
-                int rest = Width - b.Column, third = rest / 3;
-                b.Add(new string('━', third), c.Rule).Add(new string('─', third), c.Rule).Add(new string('╌', rest - 2 * third), c.Dim);
-                break;
-            }
-            default: // rule
-                b.Add("── ", c.Rule).Add(title, c.Header, hs).Add(" ", c.Rule);
-                Fill(b, '─', c.Rule);
-                break;
-        }
+            "bracket" => ("┤ ", " ├"),
+            "plain" => ("", ""),
+            _ => (" ", " "),
+        };
+        if (title.Length > Width - 4) title = title[..(Width - 4)];
+        string align = t.HeaderAlign is "center" or "right" ? t.HeaderAlign : "left";
+        int indent = Math.Max(0, t.HeaderIndent);
+        // At the edge: no space between the edge and the title.
+        if (indent == 0 && align == "left" && open == " ") open = "";
+        if (indent == 0 && align == "right" && close == " ") close = "";
+        int len = open.Length + title.Length + close.Length;
+        indent = Math.Min(indent, Width - len);
+        int lead = align switch
+        {
+            "center" => (Width - len) / 2,
+            "right" => Width - len - indent,
+            _ => indent,
+        };
+        int trail = Width - lead - len;
+
+        var b = new LineBuilder();
+        Fill(b, t.HeaderStyle, lead, left: true, c);
+        b.Add(open, c.Rule).Add(title, c.Header, hs).Add(close, c.Rule);
+        Fill(b, t.HeaderStyle, trail, left: false, c);
         return b.Build();
     }
 
-    private static void Fill(LineBuilder b, char ch, Rgb color)
+    /// <summary>Header fill of <paramref name="n"/> cells in the style's rule characters.</summary>
+    private static void Fill(LineBuilder b, string style, int n, bool left, ThemeColors c)
     {
-        if (b.Column < Width) b.Add(new string(ch, Width - b.Column), color);
+        if (n <= 0) return;
+        switch (style)
+        {
+            case "plain":
+                b.Add(new string(' ', n), c.Rule);
+                break;
+            case "dots":
+                for (int i = 0; i < n; i++) b.Add(b.Column % 2 == 0 ? "·" : " ", c.Rule);
+                break;
+            case "fade":
+            {
+                // Strong next to the title, fading out to the edge.
+                int third = n / 3, rest = n - 2 * third;
+                if (left) b.Add(new string('╌', rest), c.Dim).Add(new string('─', third), c.Rule).Add(new string('━', third), c.Rule);
+                else b.Add(new string('━', third), c.Rule).Add(new string('─', third), c.Rule).Add(new string('╌', rest), c.Dim);
+                break;
+            }
+            default:
+                b.Add(new string('─', n), c.Rule);
+                break;
+        }
     }
 
     public static readonly string[] SpacerPresets = { "blank", "rule", "dots", "dashed", "double", "custom" };

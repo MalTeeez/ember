@@ -191,15 +191,15 @@ public class LineTests
     }
 
     [Theory]
-    [InlineData("rule", "\u2500\u2500 gpu \u2500")]
-    [InlineData("spaced", "\u2500 g p u \u2500")]
-    [InlineData("plain", "gpu ")]
-    [InlineData("bracket", "\u2500\u2500\u2524 gpu \u251C\u2500")]
-    [InlineData("dots", "gpu \u00B7 ")]
-    [InlineData("fade", "gpu \u2501")]
-    public void Header_Styles(string style, string start)
+    [InlineData("rule", 2, "\u2500\u2500 gpu \u2500")]
+    [InlineData("spaced", 1, "\u2500 g p u \u2500")]
+    [InlineData("plain", 0, "gpu ")]
+    [InlineData("bracket", 2, "\u2500\u2500\u2524 gpu \u251C\u2500")]
+    [InlineData("dots", 0, "gpu \u00B7 ")]
+    [InlineData("fade", 0, "gpu \u2501")]
+    public void Header_Styles(string style, int indent, string start)
     {
-        var t = new Theme { HeaderStyle = style };
+        var t = new Theme { HeaderStyle = style, HeaderIndent = indent };
         var h = Layout.Header("GPU", ThemeColors.From(t));
         Assert.StartsWith(start, h.Text);
         Assert.Equal(Layout.Width, h.Length);

@@ -12,6 +12,26 @@ internal static class Paths
     public static string NotesIndex => Path.Combine(NotesDir, "notes.json");
     public static string LogFile => Path.Combine(AppData, "ember.log");
     public static string ClaudeCredentials => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", ".credentials.json");
+
+    /// <summary>Opens the log in the default editor. Makes an empty log first if there is none.</summary>
+    public static void OpenLog()
+    {
+        try
+        {
+            Directory.CreateDirectory(AppData);
+            if (!File.Exists(LogFile))
+                File.WriteAllText(LogFile, Log.Enabled ? "" : "Debug log is off. Turn it on in Settings > General > Debug.\r\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        Open(LogFile);
+    }
+
+    /// <summary>Opens a file or folder with its default program.</summary>
+    public static void Open(string path)
+    {
+        if ((long)W.ShellExecute(IntPtr.Zero, "open", path, null, null, W.SW_SHOWNORMAL) <= 32)
+            W.ShellExecute(IntPtr.Zero, "open", "notepad.exe", "\"" + path + "\"", null, W.SW_SHOWNORMAL);
+    }
 }
 
 /// <summary>Debug log. Off by default; turn on in Settings. The file is cut at 1 MB.</summary>

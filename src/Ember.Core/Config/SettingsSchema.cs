@@ -148,11 +148,15 @@ public static class SettingsSchema
         yield return Bool(G, "Debug", "Show everything (ignore thresholds, sample data)", s => s.PreviewAll, (s, v) => s.PreviewAll = v,
             "For theming: every enabled item shows, missing data gets sample values.");
         yield return Bool(G, "Debug", "Debug log", s => s.DebugLog, (s, v) => s.DebugLog = v);
+        yield return Action(G, "Debug", "Open log", "app.openlog");
+        yield return Action(G, "Debug", "Open settings file", "app.opensettings");
+        yield return Action(G, "Debug", "Open data folder", "app.openfolder");
 
         // ── Layout ──
         const string L = "Layout";
         yield return Choice(L, "Order and items", "Load layout preset", LayoutPreset.BuiltIn.Select(p => p.Name).Prepend("").ToArray(),
-            _ => "", (s, t) => { if (LayoutPreset.Find(t) is { } p) s.Entries = p.Entries; }, reload: true);
+            s => LayoutPreset.BuiltIn.Any(p => p.Name == s.LayoutName) ? s.LayoutName : "",
+            (s, t) => { if (LayoutPreset.Find(t) is { } p) { s.Entries = p.Entries; s.LayoutName = p.Name; } }, reload: true);
         yield return new SettingField { Page = L, Section = "Order and items", Label = "Lines", Kind = FieldKind.LayoutEditor };
         yield return Action(L, "Order and items", "Import layout…", "layout.import");
         yield return Action(L, "Order and items", "Export layout…", "layout.export");
@@ -167,7 +171,8 @@ public static class SettingsSchema
         // ── Appearance ──
         const string A = "Appearance";
         yield return Choice(A, "Theme", "Theme preset", ThemeStore.BuiltIn.Select(t => t.Name).Prepend("").ToArray(),
-            _ => "", (s, t) => { if (ThemeStore.Find(t) is { } th) s.Theme = th; }, reload: true);
+            s => ThemeStore.BuiltIn.Any(t => t.Name == s.Theme.Name) ? s.Theme.Name : "",
+            (s, t) => { if (ThemeStore.Find(t) is { } th) s.Theme = th; }, reload: true);
         yield return Action(A, "Theme", "Import theme…", "theme.import");
         yield return Action(A, "Theme", "Export theme…", "theme.export");
         yield return Choice(A, "Background", "Background", ThemeStore.BackgroundKinds, s => s.Theme.Background.Kind, (s, t) => s.Theme.Background.Kind = t);
@@ -182,6 +187,8 @@ public static class SettingsSchema
         yield return Bool(A, "Background", "Text shadow", s => s.Theme.Background.TextShadow, (s, v) => s.Theme.Background.TextShadow = v);
 
         yield return Choice(A, "Style", "Section headers", ThemeStore.HeaderStyles, s => s.Theme.HeaderStyle, (s, t) => s.Theme.HeaderStyle = t);
+        yield return Choice(A, "Style", "Header alignment", ThemeStore.HeaderAligns, s => s.Theme.HeaderAlign, (s, t) => s.Theme.HeaderAlign = t);
+        yield return Slider(A, "Style", "Header indent (characters)", 0, 12, s => s.Theme.HeaderIndent, (s, v) => s.Theme.HeaderIndent = (int)v);
         yield return Bool(A, "Style", "Upper-case headers", s => s.Theme.HeaderUpper, (s, v) => s.Theme.HeaderUpper = v);
         yield return Bool(A, "Style", "Bold headers", s => s.Theme.HeaderBold, (s, v) => s.Theme.HeaderBold = v);
         yield return Bool(A, "Style", "Bold values", s => s.Theme.BoldValues, (s, v) => s.Theme.BoldValues = v);

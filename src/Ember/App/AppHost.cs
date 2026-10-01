@@ -16,7 +16,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
 {
     public const string HostClass = "Ember.Host";
     private const uint WM_SNAPSHOT = W.WM_APP + 1, WM_TRAY = W.WM_APP + 2, WM_CLAUDE = W.WM_APP + 3;
-    private const int CmdNewNote = 1, CmdEdit = 2, CmdSettings = 3, CmdShow = 4, CmdPreview = 5, CmdExit = 9;
+    private const int CmdNewNote = 1, CmdEdit = 2, CmdSettings = 3, CmdShow = 4, CmdPreview = 5, CmdOpenLog = 6, CmdExit = 9;
 
     public static readonly uint ActivateMessage = W.RegisterWindowMessage("Ember.Activate");
     private static readonly uint TaskbarCreated = W.RegisterWindowMessage("TaskbarCreated");
@@ -144,6 +144,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
             (CmdEdit, "Edit layout", _widget.EditMode),
             (CmdPreview, "Show everything (theming preview)", _settings.PreviewAll),
             (CmdSettings, "Settings…", false),
+            (CmdOpenLog, "Open log", false),
             (0, "", false),
             (CmdExit, "Exit", false),
         });
@@ -168,6 +169,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
             case >= CmdRestoreNoteBase: RestoreNoteByMenu(cmd - CmdRestoreNoteBase); break;
             case CmdEdit: _widget.SetEditMode(!_widget.EditMode); break;
             case CmdSettings: OpenSettings(); break;
+            case CmdOpenLog: Paths.OpenLog(); break;
             case CmdExit: W.DestroyWindow(Handle); break;
         }
     }

@@ -102,8 +102,8 @@ public enum UsageKind { Auto, Short, Long, Extra }
 /// <summary>One usage limit for the widget (Claude, Codex or Copilot).</summary>
 public sealed record ClaudeLine(string Label, double Used, TimeSpan? ResetIn, ProjectionResult Projection, UsageKind Kind = UsageKind.Auto)
 {
-    /// <summary>Kind from the label when not set ("5h" short, "wk" long, others extra).</summary>
-    public UsageKind ResolvedKind => Kind != UsageKind.Auto ? Kind : Label switch { "5h" => UsageKind.Short, "wk" => UsageKind.Long, _ => UsageKind.Extra };
+    /// <summary>Kind from the label when not set ("5h" short, "week" long, others extra).</summary>
+    public UsageKind ResolvedKind => Kind != UsageKind.Auto ? Kind : Label switch { "5h" => UsageKind.Short, "week" or "wk" => UsageKind.Long, _ => UsageKind.Extra };
 }
 
 /// <summary>Keeps the latest usage data of one provider and creates its lines.</summary>
@@ -149,13 +149,12 @@ public class UsageTracker
     private static TimeSpan? ResetIn(UsageWindow w, DateTimeOffset now)
         => w.ResetsAt is { } r ? (r - now < TimeSpan.Zero ? TimeSpan.Zero : r - now) : null;
 
-    public static string ModelLabel(string model) => model.ToLowerInvariant() switch
+    /// <summary>Model name as label: full when short ("opus", "sonnet"), else cut to 8 characters.</summary>
+    public static string ModelLabel(string model)
     {
-        "opus" => "op",
-        "sonnet" => "son",
-        "haiku" => "hai",
-        var m => m.Length <= 3 ? m : m[..3],
-    };
+        string m = model.Trim().ToLowerInvariant();
+        return m.Length <= 8 ? m : m[..8];
+    }
 }
 
 /// <summary>The Claude tracker (same as <see cref="UsageTracker"/>).</summary>

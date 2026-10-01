@@ -153,7 +153,7 @@ internal sealed class TextRenderer : IDisposable
                 if ((run.Style & RunStyle.Icon) != 0)
                 {
                     if (run.Text.Length > 0 && _iconFont != IntPtr.Zero)
-                        DrawCentered(g, run.Text[0].ToString(), _iconFont, x0 + col * CellWidth, y, CellWidth * 2);
+                        DrawIcon(g, run.Text[0].ToString(), color(run.Color), x0 + col * CellWidth, y, CellWidth * 2);
                     col += run.Text.Length;
                     continue;
                 }
@@ -200,6 +200,17 @@ internal sealed class TextRenderer : IDisposable
     }
 
     /// <summary>Centred in a cell box of the line height (icons, fallback glyphs).</summary>
+    /// <summary>
+    /// Icon glyph as a path, filled and stroked, so its lines are about as thick as the text
+    /// (the icon fonts have hairline strokes at small sizes).
+    /// </summary>
+    private void DrawIcon(IntPtr g, string s, uint argb, float x, float y, float width)
+    {
+        var rect = new RectF(x, y, width, LineHeight);
+        if (!Gdip.DrawGlyphPath(g, _brush, argb, _iconFamily, EmPixels * 0.9f, rect, _center, s))
+            DrawCentered(g, s, _iconFont, x, y, width);
+    }
+
     private void DrawCentered(IntPtr g, string s, IntPtr font, float x, float y, float width)
     {
         var rect = new RectF(x, y, width, LineHeight);

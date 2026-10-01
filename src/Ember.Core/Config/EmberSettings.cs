@@ -125,6 +125,10 @@ public sealed class EmberSettings
 {
     public FieldSettings Fields { get; set; } = new();
     public List<LayoutEntry> Entries { get; set; } = LayoutPreset.Default().Entries;
+    /// <summary>Name of the last loaded layout preset (shown in the preset list).</summary>
+    public string LayoutName { get; set; } = "default";
+    /// <summary>Version of the layout format; older layouts are migrated in <see cref="Normalize"/>.</summary>
+    public int LayoutVersion { get; set; }
     public Ember.Core.Render.Theme Theme { get; set; } = new();
     /// <summary>Debug: show every enabled item, ignore thresholds and delays, fill missing data with sample values.</summary>
     public bool PreviewAll { get; set; } = false;
@@ -143,6 +147,12 @@ public sealed class EmberSettings
     {
         Fields ??= new(); Theme ??= new(); Theme.Background ??= new(); Theme.GraphStops ??= new();
         Entries = LayoutPreset.Normalize(Entries, addMissingAsDefault: true);
+        if (LayoutVersion < LayoutPreset.CurrentVersion)
+        {
+            LayoutPreset.Migrate(Entries, LayoutVersion);
+            LayoutVersion = LayoutPreset.CurrentVersion;
+        }
+        LayoutName ??= "";
         Thresholds ??= new(); Intervals ??= new(); Network ??= new(); Layout ??= new(); Notes ??= new();
         Network.ExcludedAdapters ??= new();
         Intervals.SensorSeconds = Math.Clamp(Intervals.SensorSeconds, 0.25, 60);

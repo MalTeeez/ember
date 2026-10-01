@@ -65,17 +65,46 @@ public static partial class GpuNames
         return integrated ? "igpu" : "gpu";
     }
 
-    /// <summary>Labels for several GPUs; equal labels get a number ("4090", "4092").</summary>
+    /// <summary>
+    /// Labels for several GPUs. The first GPU with a label keeps it ("4090"); further GPUs with the same
+    /// label get "#n" ("40#2"), so no label looks like another model number.
+    /// </summary>
     public static List<string> Labels(IReadOnlyList<(string Name, bool Integrated)> gpus)
     {
         var labels = gpus.Select(g => ShortLabel(g.Name, g.Integrated)).ToList();
-        foreach (var dup in labels.GroupBy(l => l).Where(g => g.Count() > 1).Select(g => g.Key).ToList())
+        var count = new Dictionary<string, int>();
+        for (int i = 0; i < labels.Count; i++)
         {
-            int n = 1;
-            for (int i = 0; i < labels.Count; i++)
-                if (labels[i] == dup) labels[i] = dup[..Math.Min(3, dup.Length)] + n++;
+            int n = count[labels[i]] = count.GetValueOrDefault(labels[i]) + 1;
+            if (n > 1)
+            {
+                string suffix = "#" + n;
+                labels[i] = labels[i][..Math.Min(labels[i].Length, 4 - suffix.Length)] + suffix;
+            }
         }
         return labels;
+    }
+}
+
+/// <summary>
+/// Some systems list the same GPU twice (two LUIDs, same hardware IDs), and only one of them has
+/// counters. Keeps one adapter per hardware, unless several of them have counter data (real twin GPUs).
+/// </summary>
+public static class GpuDedupe
+{
+    public static List<T> Select<T, TKey>(IReadOnlyList<T> adapters, Func<T, TKey> hardwareKey, Func<T, bool> hasData) where TKey : notnull
+    {
+        var result = new List<T>();
+        foreach (var group in adapters.GroupBy(hardwareKey))
+        {
+            var list = group.ToList();
+            if (list.Count == 1) { result.Add(list[0]); continue; }
+            var withData = list.Where(hasData).ToList();
+            if (withData.Count == 0) result.Add(list[0]);
+            else result.AddRange(withData);
+        }
+        // Keep the original order.
+        return adapters.Where(a => result.Contains(a)).ToList();
     }
 }
 

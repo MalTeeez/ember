@@ -47,7 +47,7 @@ public class CodexTests
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1790000000), d.FiveHour.ResetsAt);
         Assert.Equal(12, d.SevenDay!.Utilization);
         Assert.Equal("5h", d.ShortLabel);
-        Assert.Equal("wk", d.LongLabel);
+        Assert.Equal("week", d.LongLabel);
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class CopilotTests
         Assert.Equal(60, d.SevenDay!.Utilization, 6);
         Assert.Equal(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), d.SevenDay.ResetsAt);
         Assert.Equal(TimeSpan.FromDays(31), d.SevenDay.Length);
-        Assert.Equal("prem", d.LongLabel);
+        Assert.Equal("premium", d.LongLabel);
         Assert.Empty(d.Models);
     }
 
@@ -197,17 +197,20 @@ public class ProviderComposeTests
             },
             Copilot = new List<ClaudeLine>
             {
-                new("prem", 57, TimeSpan.FromDays(12), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.MaxValue, TimeSpan.FromDays(12)), UsageKind.Long),
+                new("premium", 57, TimeSpan.FromDays(12), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.MaxValue, TimeSpan.FromDays(12)), UsageKind.Long),
             },
         };
         var lines = new StatusComposer().Compose(s, Cfg());
         int cx = lines.FindIndex(l => l.Text.StartsWith("── codex"));
         int cp = lines.FindIndex(l => l.Text.StartsWith("── copilot"));
         Assert.True(cx >= 0 && cp > cx);
-        Assert.StartsWith("5h   ", lines[cx + 1].Text);
-        Assert.StartsWith("prem ", lines[cp + 1].Text);
+        Assert.StartsWith("5h      ", lines[cx + 1].Text); // label column as wide as "premium "
+        Assert.StartsWith("premium ", lines[cp + 1].Text);
         Assert.EndsWith(" 57%", lines[cp + 1].Text);
-        Assert.EndsWith(" 12d0h", lines[cp + 2].Text);
+        Assert.Contains(" 12d0h ", lines[cp + 2].Text);
+        Assert.EndsWith("will last", lines[cp + 2].Text);
+        // Bars of both providers have the same length.
+        Assert.Equal(lines[cx + 1].Text.TrimEnd().Length, lines[cp + 1].Text.TrimEnd().Length);
     }
 
     [Fact]

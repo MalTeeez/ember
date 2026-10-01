@@ -66,20 +66,20 @@ public static class DemoData
             s.Claude = new List<ClaudeLine>
             {
                 new("5h", 42, TimeSpan.FromMinutes(52), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.FromHours(9), TimeSpan.FromMinutes(52))),
-                new("wk", 71, TimeSpan.FromHours(70), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(24), TimeSpan.FromHours(70))),
-                new("op", 85, TimeSpan.FromHours(70), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(9), TimeSpan.FromHours(70))),
+                new("week", 71, TimeSpan.FromHours(70), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(24), TimeSpan.FromHours(70))),
+                new("opus", 85, TimeSpan.FromHours(70), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(9), TimeSpan.FromHours(70))),
             };
         }
         if (s.Codex is not { Count: > 0 })
             s.Codex = new List<ClaudeLine>
             {
                 new("5h", 18, TimeSpan.FromMinutes(200), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.FromHours(20), TimeSpan.FromMinutes(200)), UsageKind.Short),
-                new("wk", 64, TimeSpan.FromHours(30), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(20), TimeSpan.FromHours(30)), UsageKind.Long),
+                new("week", 64, TimeSpan.FromHours(30), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(20), TimeSpan.FromHours(30)), UsageKind.Long),
             };
         if (s.Copilot is not { Count: > 0 })
             s.Copilot = new List<ClaudeLine>
             {
-                new("prem", 57, TimeSpan.FromDays(12), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.FromDays(20), TimeSpan.FromDays(12)), UsageKind.Long),
+                new("premium", 57, TimeSpan.FromDays(12), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.FromDays(20), TimeSpan.FromDays(12)), UsageKind.Long),
             };
         if (s.Batteries is not { Count: > 0 })
             s.Batteries = new List<Ember.Core.Devices.DeviceBattery>

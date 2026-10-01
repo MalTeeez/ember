@@ -171,10 +171,25 @@ public class GpuTests
         => Assert.Equal(expected, GpuNames.ShortLabel(name, integrated));
 
     [Fact]
-    public void Labels_DuplicatesNumbered()
+    public void Labels_FirstKeepsModel_OthersNumbered()
     {
         var l = GpuNames.Labels(new[] { ("NVIDIA GeForce RTX 4090", false), ("NVIDIA GeForce RTX 4090", false), ("Intel UHD 770", true) });
-        Assert.Equal(new[] { "4091", "4092", "770" }, l);
+        Assert.Equal(new[] { "4090", "40#2", "770" }, l);
+        Assert.Equal(new[] { "4090" }, GpuNames.Labels(new[] { ("NVIDIA GeForce RTX 4090", false) }));
+    }
+
+    [Fact]
+    public void Dedupe_SameHardwareListedTwice_KeepsTheActiveOne()
+    {
+        var a = new[] { ("4090", "luid1", false), ("4090", "luid2", true), ("770", "luid3", false) };
+        var kept = GpuDedupe.Select(a, x => x.Item1, x => x.Item3);
+        Assert.Equal(new[] { "luid2", "luid3" }, kept.Select(x => x.Item2));
+        // Neither active: the first one.
+        var idle = new[] { ("4090", "luid1", false), ("4090", "luid2", false) };
+        Assert.Equal(new[] { "luid1" }, GpuDedupe.Select(idle, x => x.Item1, x => x.Item3).Select(x => x.Item2));
+        // Both active (real twin GPUs): both.
+        var twins = new[] { ("4090", "luid1", true), ("4090", "luid2", true) };
+        Assert.Equal(2, GpuDedupe.Select(twins, x => x.Item1, x => x.Item3).Count);
     }
 
     [Fact]

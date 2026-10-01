@@ -361,3 +361,102 @@ public class CoreGridComposeTests
         Assert.Contains(lines[0].Hits, h => h.Action == HitAction.NewNote);
     }
 }
+
+public class HeaderAlignTests
+{
+    private static string H(string align, int indent, string style = "rule")
+        => Layout.Header("gpu", ThemeColors.From(new Theme { HeaderStyle = style, HeaderAlign = align, HeaderIndent = indent })).Text;
+
+    [Fact]
+    public void Left_Indent()
+    {
+        Assert.StartsWith("gpu ─", H("left", 0));
+        Assert.StartsWith("──── gpu ─", H("left", 4));
+        Assert.Equal(Layout.Width, H("left", 4).Length);
+    }
+
+    [Fact]
+    public void Right_And_Center()
+    {
+        Assert.EndsWith("─ gpu", H("right", 0));
+        Assert.EndsWith(" gpu ──", H("right", 2));
+        var c = H("center", 2);
+        int at = c.IndexOf("gpu", StringComparison.Ordinal);
+        Assert.InRange(at, 13, 16);
+        Assert.Equal(Layout.Width, c.Length);
+    }
+
+    [Fact]
+    public void ThemeParse_FixesBadValues()
+    {
+        var t = ThemeStore.Parse("""{"headerAlign":"diagonal","headerIndent":99}""")!;
+        Assert.Equal("left", t.HeaderAlign);
+        Assert.Equal(24, t.HeaderIndent);
+    }
+}
+
+public class LayoutMigrationTests
+{
+    [Fact]
+    public void OldLayout_GetsNetHeader_Once()
+    {
+        var entries = new List<LayoutEntry>
+        {
+            LayoutEntry.Item("cpu.load"), LayoutEntry.Item("net.down"), LayoutEntry.Item("net.up"),
+            LayoutEntry.Spacer(), LayoutEntry.Header("gpu"), LayoutEntry.Item("gpu.load"),
+        };
+        var s = SettingsStore.Parse(System.Text.Json.JsonSerializer.Serialize(new { entries }));
+        int net = s.Entries.FindIndex(e => e.Id == "net.down");
+        Assert.Equal("header", s.Entries[net - 1].Kind);
+        Assert.Equal("net", s.Entries[net - 1].Text);
+        Assert.Equal("spacer", s.Entries[net - 2].Kind);
+        Assert.Equal(LayoutPreset.CurrentVersion, s.LayoutVersion);
+        // Saved and loaded again: no second header.
+        var again = SettingsStore.Parse(SettingsStore.Serialize(s));
+        Assert.Single(again.Entries, e => e.Kind == "header" && e.Text == "net");
+    }
+
+    [Fact]
+    public void PresetChoices_ShowTheChosenName()
+    {
+        var s = new EmberSettings();
+        var theme = SettingsSchema.Fields.First(f => f.Label == "Theme preset");
+        theme.Set(s, "nord");
+        Assert.Equal("nord", theme.Get(s));
+        var layout = SettingsSchema.Fields.First(f => f.Label == "Load layout preset");
+        layout.Set(s, "compact");
+        Assert.Equal("compact", layout.Get(s));
+    }
+}
+
+public class DataGateTests
+{
+    private static readonly DateTime T0 = new(2026, 1, 1);
+
+    [Fact]
+    public void LostData_HidesForAMinute()
+    {
+        var g = new DataGate();
+        Assert.False(g.Update("c", false, T0));                // never had data: just empty
+        Assert.True(g.Update("c", true, T0.AddSeconds(5)));     // first data shows at once
+        Assert.False(g.Update("c", false, T0.AddSeconds(10)));  // lost
+        Assert.False(g.Update("c", true, T0.AddSeconds(30)));   // back too soon: still hidden
+        Assert.True(g.Update("c", true, T0.AddSeconds(71)));    // a minute after the loss
+    }
+
+    [Fact]
+    public void Composer_UsageSectionGoesWithoutKeptSpace()
+    {
+        var cfg = new EmberSettings();
+        cfg.Layout.HoldSeconds = 600;
+        var c = new StatusComposer();
+        var claude = new List<Ember.Core.Claude.ClaudeLine>
+        {
+            new("5h", 42, TimeSpan.FromMinutes(52), new Ember.Core.Claude.ProjectionResult(Ember.Core.Claude.ProjectionKind.Lasts, TimeSpan.MaxValue, TimeSpan.FromMinutes(52))),
+        };
+        var t0 = new DateTime(2026, 10, 1, 12, 0, 0);
+        Assert.Contains(c.Compose(new Snapshot { Time = t0, Claude = claude }, cfg), l => l.Text.Contains("claude"));
+        var gone = c.Compose(new Snapshot { Time = t0.AddSeconds(1), Claude = null }, cfg);
+        Assert.DoesNotContain(gone, l => l.Text.Contains("claude"));
+    }
+}

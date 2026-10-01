@@ -29,7 +29,43 @@ public sealed class HeightKeeper
         return k.Height;
     }
 
+    /// <summary>Drops the kept height of one key (its item is gone on purpose, not just smaller).</summary>
+    public void Forget(string key) => _keep.Remove(key);
+
     public void Clear() => _keep.Clear();
+}
+
+/// <summary>
+/// Hides a section whose data source stopped giving data, for at least <see cref="HideFor"/>, so a
+/// flaky source does not make the section come and go. A source that never had data is just empty.
+/// </summary>
+public sealed class DataGate
+{
+    private readonly Dictionary<string, (bool HadData, DateTime LostAt)> _state = new();
+    public TimeSpan HideFor { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>True if the section may show its data now.</summary>
+    public bool Update(string key, bool hasData, DateTime now)
+    {
+        _state.TryGetValue(key, out var st);
+        if (!hasData)
+        {
+            if (st.HadData || st.LostAt == default) _state[key] = (false, now);
+            return false;
+        }
+        if (st.LostAt != default && !st.HadData && now - st.LostAt < HideFor && _everHad.Contains(key)) return false;
+        _state[key] = (true, default);
+        _everHad.Add(key);
+        return true;
+    }
+
+    private readonly HashSet<string> _everHad = new();
+
+    public void Clear()
+    {
+        _state.Clear();
+        _everHad.Clear();
+    }
 }
 
 /// <summary>

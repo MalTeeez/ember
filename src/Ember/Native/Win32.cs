@@ -237,7 +237,7 @@ internal static class W
         WM_SETFOCUS = 0x0007, WM_KILLFOCUS = 0x0008, WM_SETREDRAW = 0x000B, WM_SETTEXT = 0x000C, WM_GETTEXT = 0x000D,
         WM_GETTEXTLENGTH = 0x000E, WM_PAINT = 0x000F, WM_CLOSE = 0x0010, WM_QUIT = 0x0012, WM_ERASEBKGND = 0x0014,
         WM_SHOWWINDOW = 0x0018, WM_SETCURSOR = 0x0020, WM_GETMINMAXINFO = 0x0024, WM_WINDOWPOSCHANGING = 0x0046,
-        WM_NOTIFY = 0x004E, WM_SETFONT = 0x0030, WM_NCHITTEST = 0x0084, WM_NCRBUTTONUP = 0x00A5,
+        WM_NOTIFY = 0x004E, WM_SETFONT = 0x0030, WM_NCHITTEST = 0x0084, WM_NCRBUTTONUP = 0x00A5, WM_NCLBUTTONDOWN = 0x00A1,
         WM_KEYDOWN = 0x0100, WM_CHAR = 0x0102, WM_COMMAND = 0x0111, WM_SYSCOMMAND = 0x0112, WM_TIMER = 0x0113,
         WM_VSCROLL = 0x0115, WM_CTLCOLOREDIT = 0x0133, WM_CTLCOLORSTATIC = 0x0138, WM_CTLCOLORBTN = 0x0135,
         WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, WM_RBUTTONDOWN = 0x0204,
@@ -268,7 +268,8 @@ internal static class W
     public const int GWL_STYLE = -16, GWL_EXSTYLE = -20, GWLP_HWNDPARENT = -8;
     public const int SW_HIDE = 0, SW_SHOW = 5, SW_SHOWNOACTIVATE = 4, SW_SHOWNORMAL = 1;
     public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010,
-        SWP_FRAMECHANGED = 0x0020, SWP_SHOWWINDOW = 0x0040, SWP_NOOWNERZORDER = 0x0200;
+        SWP_FRAMECHANGED = 0x0020, SWP_SHOWWINDOW = 0x0040, SWP_NOOWNERZORDER = 0x0200,
+        SWP_NOREDRAW = 0x0008, SWP_NOCOPYBITS = 0x0100;
     public static readonly IntPtr HWND_BOTTOM = new(1), HWND_TOP = IntPtr.Zero;
 
     public const int HTCLIENT = 1, HTCAPTION = 2, HTTRANSPARENT = -1, HTLEFT = 10, HTRIGHT = 11, HTTOP = 12,
@@ -314,7 +315,13 @@ internal static class W
     public const uint EM_SETPARAFORMAT = WM_USER + 71, PFM_STARTINDENT = 0x1, PFM_OFFSET = 0x4, PFM_SPACEBEFORE = 0x40, PFM_SPACEAFTER = 0x80;
     public const uint CFE_UNDERLINE = 0x4;
     [DllImport("user32.dll")] public static extern short GetKeyState(int vk);
-    public const int VK_CONTROL = 0x11;
+    public const int VK_CONTROL = 0x11, VK_LBUTTON = 0x01;
+    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vk);
+    [DllImport("user32.dll")] public static extern bool RedrawWindow(IntPtr hwnd, IntPtr rect, IntPtr rgn, uint flags);
+    public const uint RDW_INVALIDATE = 0x1, RDW_ERASE = 0x4, RDW_ALLCHILDREN = 0x80, RDW_UPDATENOW = 0x100, RDW_FRAME = 0x400;
+    [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    public const int DWMWA_NCRENDERING_POLICY = 2, DWMNCRP_DISABLED = 1, DWMWA_WINDOW_CORNER_PREFERENCE = 33,
+        DWMWCP_DONOTROUND = 1, DWMWCP_ROUND = 2, DWMWCP_ROUNDSMALL = 3;
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr hwnd, uint msg, IntPtr wParam, ref PARAFORMAT2 lParam);
     public const uint ENM_CHANGE = 0x1, ENM_MOUSEEVENTS = 0x20000, ENM_KEYEVENTS = 0x10000;
     public const int EN_MSGFILTER = 0x0700;

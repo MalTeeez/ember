@@ -135,7 +135,7 @@ public sealed class LayoutPreset
         foreach (var group in missing.GroupBy(i => i.Group))
         {
             bool newGroup = !ItemCatalog.All.Any(i => i.Group == group.Key && seen.Contains(i.Id));
-            if (newGroup && group.Key is not ("cpu" or "network" or "widget"))
+            if (newGroup && group.Key is not ("cpu" or "widget"))
             {
                 list.Add(LayoutEntry.Spacer());
                 list.Add(LayoutEntry.Header(group.Key));
@@ -146,13 +146,31 @@ public sealed class LayoutPreset
         return list;
     }
 
+    /// <summary>Version 2: the network items have a "net" section header.</summary>
+    public const int CurrentVersion = 2;
+
+    /// <summary>Changes an older layout to the current version (adds new section headers).</summary>
+    public static void Migrate(List<LayoutEntry> entries, int fromVersion)
+    {
+        if (fromVersion < 2)
+        {
+            int first = entries.FindIndex(e => e.Kind == "item" && e.Id.StartsWith("net.", StringComparison.Ordinal));
+            if (first < 0) return;
+            int k = first - 1;
+            while (k >= 0 && entries[k].Kind == "spacer") k--;
+            if (k >= 0 && entries[k].Kind == "header") return; // already has a header
+            entries.Insert(first, LayoutEntry.Header("net"));
+            if (first > 0) entries.Insert(first, LayoutEntry.Spacer());
+        }
+    }
+
     public static IReadOnlyList<LayoutPreset> BuiltIn { get; } = new[] { Default(), Compact(), Everything() };
 
     public static LayoutPreset? Find(string name) => BuiltIn.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } p
         ? Parse(p.ToJson())
         : null;
 
-    /// <summary>The spec layout: CPU and network without header; GPU, memory, disk and Claude sections.</summary>
+    /// <summary>The spec layout: CPU without header; network, GPU, memory, disk, Claude, Codex, Copilot and device sections.</summary>
     public static LayoutPreset Default() => new()
     {
         Name = "default",
@@ -160,6 +178,7 @@ public sealed class LayoutPreset
         {
             LayoutEntry.Item("toolbar"),
             LayoutEntry.Item("cpu.load"), LayoutEntry.Item("cpu.cores"), LayoutEntry.Item("cpu.throttle"), LayoutEntry.Item("cpu.top"),
+            LayoutEntry.Spacer(), LayoutEntry.Header("net"),
             LayoutEntry.Item("net.down"), LayoutEntry.Item("net.up"), LayoutEntry.Item("net.adapters"), LayoutEntry.Item("net.quality", false),
             LayoutEntry.Spacer(), LayoutEntry.Header("gpu"),
             LayoutEntry.Item("gpu.load"), LayoutEntry.Item("gpu.vram", false), LayoutEntry.Item("gpu.top"),

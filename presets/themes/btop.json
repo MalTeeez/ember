@@ -29,6 +29,8 @@
   "BarStyle": "squares",
   "BarGradient": true,
   "HeaderStyle": "bracket",
+  "HeaderAlign": "left",
+  "HeaderIndent": 2,
   "HeaderUpper": false,
   "HeaderBold": true,
   "BoldValues": true,

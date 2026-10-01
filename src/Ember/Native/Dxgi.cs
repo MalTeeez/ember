@@ -4,7 +4,7 @@ using Ember.Core.Gpu;
 namespace Ember.Native;
 
 /// <summary>A hardware GPU from DXGI.</summary>
-internal sealed record DxgiAdapter(string Name, string Luid, ulong DedicatedVideoMemory, uint VendorId)
+internal sealed record DxgiAdapter(string Name, string Luid, ulong DedicatedVideoMemory, uint VendorId, uint DeviceId = 0, uint SubSysId = 0)
 {
     public bool Integrated => GpuAggregator.IsIntegrated(DedicatedVideoMemory);
 }
@@ -48,6 +48,8 @@ internal static unsafe class Dxgi
                     if (getDesc1(adapter, desc) != 0) continue;
                     string name = new string((char*)desc, 0, 128).Split('\0')[0].Trim();
                     uint vendor = *(uint*)(desc + 256);
+                    uint device = *(uint*)(desc + 260);
+                    uint subsys = *(uint*)(desc + 264);
                     ulong dedicated = *(ulong*)(desc + 272);
                     uint luidLow = *(uint*)(desc + 296);
                     int luidHigh = *(int*)(desc + 300);
@@ -55,7 +57,7 @@ internal static unsafe class Dxgi
                     if ((flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0 || vendor == VendorMicrosoft) continue;
                     var luid = GpuNames.LuidText(luidHigh, luidLow);
                     if (list.Any(a => a.Luid == luid)) continue;
-                    list.Add(new DxgiAdapter(name, luid, dedicated, vendor));
+                    list.Add(new DxgiAdapter(name, luid, dedicated, vendor, device, subsys));
                 }
                 finally { Release(adapter); }
             }

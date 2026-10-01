@@ -33,7 +33,7 @@ internal sealed class WidgetWindow : Win32Window
     private int _targetH, _targetW;
     private int _animFromH;
     private readonly Stopwatch _anim = new();
-    private bool _animating, _moving;
+    private bool _animating, _moving, _noTipUntilMove;
     private string _accentKey = "";
     private float _pad;
 
@@ -362,7 +362,11 @@ internal sealed class WidgetWindow : Win32Window
 
     private void SetHover(int index, POINT cursor)
     {
-        if (index >= 0 && _hits[index].Hit.Tooltip is { Length: > 0 } tip) Tooltip.Shared.Show(tip, cursor);
+        // No tooltips while a mouse button is down (drag) or right after a drag, until the cursor goes to another hit.
+        bool button = (W.GetAsyncKeyState(W.VK_LBUTTON) & 0x8000) != 0;
+        if (_moving || button) _noTipUntilMove = true;
+        else if (index != _hover) _noTipUntilMove = false;
+        if (!_noTipUntilMove && index >= 0 && _hits[index].Hit.Tooltip is { Length: > 0 } tip) Tooltip.Shared.Show(tip, cursor);
         else Tooltip.HideShared();
         if (index == _hover) return;
         _hover = index;
@@ -437,8 +441,15 @@ internal sealed class WidgetWindow : Win32Window
                 if (W.GetCursorPos(out var np)) WidgetMenu?.Invoke(np);
                 return IntPtr.Zero;
 
+            case W.WM_NCLBUTTONDOWN:
+                _noTipUntilMove = true;
+                Tooltip.HideShared();
+                break;
+
             case 0x0231: // WM_ENTERSIZEMOVE
                 _moving = true;
+                _noTipUntilMove = true;
+                Tooltip.HideShared();
                 StopAnim();
                 return IntPtr.Zero;
 

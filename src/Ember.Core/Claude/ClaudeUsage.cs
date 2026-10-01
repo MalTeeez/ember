@@ -51,7 +51,7 @@ public sealed record UsageWindow(double Utilization, DateTimeOffset? ResetsAt, T
 public sealed record UsageData(UsageWindow? FiveHour, UsageWindow? SevenDay, IReadOnlyList<(string Model, UsageWindow Window)> Models)
 {
     public string ShortLabel { get; init; } = "5h";
-    public string LongLabel { get; init; } = "wk";
+    public string LongLabel { get; init; } = "week";
     /// <summary>Show extra windows always (Copilot), not only when higher than the long window (Claude models).</summary>
     public bool ModelsAlways { get; init; }
 
