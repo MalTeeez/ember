@@ -52,3 +52,15 @@ Rule: when the spec is silent, choose the simplest option.
 | M5 | Processes are scanned only while a top-process item is visible or waiting for its show delay. | CPU target < 1 %. |
 | M6 | Top CPU process % = share of all logical cores (Task Manager style, 100 % = whole CPU). | Same scale as the combined load. |
 | M7 | Disk label `d0`, `d1` … from the PDH PhysicalDisk instance number, followed by its volumes. | Short, fits the 4-column label. |
+
+## Widget interaction
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| U1 | Desktop layer = the widget window is owned by the desktop window `Progman` and placed at the bottom of the z-order. | Not topmost, stays visible on Win+D, and needs no injection into Explorer. On `TaskbarCreated` the owner is set again. |
+| U2 | Click-through uses `WS_EX_TRANSPARENT`. While top-process lines are visible, a 100 ms timer checks the cursor and removes the flag only while the cursor is over such a line. Without top-process lines there is no timer. | A layered window cannot be click-through and clickable in parts at the same time. |
+| U3 | "Edit mode" = tray menu → Edit layout. The widget gets a dark background, can be dragged, and a right-click opens a menu (Settings, New note, Done). After a drag, the offset from the selected corner and the monitor are saved. | The spec names edit mode but does not define it. Right-click on the widget for Settings works in edit mode, because the widget is click-through otherwise. |
+| U4 | Position = corner (default top right) + offset in DIP from the monitor work area. The widget grows away from its corner. | Stays in place when lines appear or hide, and when the resolution or DPI changes. |
+| U5 | Process details popup: a normal small window with read-only text. CPU and disk are measured over 250 ms when it opens; GPU is the last sampled value (only when a GPU item is on). It closes when it loses focus. | Simplest. |
+| U6 | "End process" asks for confirmation; "End process tree" does not (as in the spec). The tree ends children first. | Spec. |
+| U7 | Edit-mode drag and DPI: per-monitor DPI v2; fonts are created for the DPI of the target monitor. | Spec: sharp text on all monitors. |

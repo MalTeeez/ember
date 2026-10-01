@@ -42,7 +42,12 @@ internal sealed partial class AppHost
     }
     private void NewNote() { }
     private void OpenSettings() { }
-    private void WireWidget() => _widget.WidgetMenu += ShowWidgetMenu;
+    private void WireWidget()
+    {
+        _widget.WidgetMenu += ShowWidgetMenu;
+        _widget.ProcessClicked += (pid, pt) => Ui.ProcessPopup.Show(pid, pt, _sampler?.GpuByPid);
+        _widget.ProcessMenu += (pid, pt) => Ui.ProcessPopup.ShowMenu(Handle, pid, pt);
+    }
     private bool IsDialogMessageForOpenWindows(ref MSG msg) => false;
     /// <summary>Runs on the sampler thread: adds the Claude lines to each snapshot.</summary>
     private Snapshot Decorate(Snapshot s)

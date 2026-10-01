@@ -15,6 +15,21 @@ internal sealed partial class Sampler
     private DateTime _adaptersTime;
     private readonly Dictionary<int, (string Name, DateTime Time)> _pidNames = new();
 
+    /// <summary>GPU load of each process (busiest engine), from the last sample. Null if not measured.</summary>
+    public volatile Dictionary<int, double>? GpuByPid;
+
+    private static Dictionary<int, double> PerProcess(List<(string Instance, double Value)> engines)
+    {
+        var perEngine = new Dictionary<(int Pid, string Engine), double>();
+        foreach (var (inst, v) in engines)
+            if (GpuNames.TryParseEngine(inst, out var e) && e.Pid > 0)
+                perEngine[(e.Pid, e.EngineKey)] = perEngine.GetValueOrDefault((e.Pid, e.EngineKey)) + v;
+        var result = new Dictionary<int, double>();
+        foreach (var ((pid, _), v) in perEngine)
+            result[pid] = Math.Max(result.GetValueOrDefault(pid), Math.Min(100, v));
+        return result;
+    }
+
     private static bool AnyGpuItem(EmberSettings cfg)
         => cfg.Items.GpuLoad || cfg.Items.GpuTemp || cfg.Items.GpuVram || cfg.Items.GpuTopProcess;
 
@@ -51,7 +66,12 @@ internal sealed partial class Sampler
         if (_adapters.Count == 0) return null;
 
         Dictionary<string, GpuAdapterLoad>? loads = null;
-        if (_gpuEngine?.Array() is { } engines) loads = GpuAggregator.Aggregate(engines);
+        if (_gpuEngine?.Array() is { } engines)
+        {
+            loads = GpuAggregator.Aggregate(engines);
+            GpuByPid = PerProcess(engines);
+        }
+        else GpuByPid = null;
 
         Dictionary<string, double>? vram = null;
         if (_gpuMem?.Array() is { } mem)
