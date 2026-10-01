@@ -11,7 +11,7 @@ namespace Ember.Ui;
 internal sealed class TextRenderer : IDisposable
 {
     private const string FallbackFace = "Segoe UI Symbol";
-    private const string SpecialChars = "⣿⡀█▏▌│└─↓↑↻°…—";
+    private const string SpecialChars = "\u28FF\u2840\u2588\u2589\u258A\u258B\u258C\u258D\u258E\u258F\u2502\u2514\u2500\u2193\u2191\u21BB\u00B0\u2026\u2014";
 
     private IntPtr _family, _font, _fbFamily, _fbFont, _format, _brush;
     private readonly HashSet<char> _missing = new();

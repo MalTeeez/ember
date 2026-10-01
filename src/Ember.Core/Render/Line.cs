@@ -123,12 +123,13 @@ public sealed class LineBuilder
 public static class Layout
 {
     public const int Width = 32;
-    public const int LabelCol = 0;      // 4 chars
-    public const int ValueCol = 4;      // 5 chars
-    public const int FieldCol = 9;      // 5 chars (unit or temperature)
+    public const int LabelCol = 0;      // 3 chars ("cpu", "↓", "rtx")
+    public const int ValueCol = 3;      // 5 chars, right aligned
+    public const int FieldCol = 8;      // 5 chars (unit or temperature), then 1 space
     public const int GraphCol = 14;     // 12 chars
     public const int GraphChars = 12;   // 24 samples
-    public const int PeakCol = 26;      // 6 chars
+    public const int PeakCol = 26;      // 6 chars (" pk 61")
+    public const int TextCol = 5;       // value column of lines without a graph (memory, disk)
 
     /// <summary>Section header: "─ G P U ─────…" (dim).</summary>
     public static Line Header(string name)

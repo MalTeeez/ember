@@ -31,10 +31,10 @@ public class ComposerTests
         var c = new StatusComposer();
         var lines = c.Compose(Snap(0), new EmberSettings());
         Assert.Equal(3, lines.Count);
-        Assert.StartsWith("cpu   23%", lines[0].Text);
-        Assert.StartsWith("\u2193    61.0 Mbps", lines[1].Text);
+        Assert.StartsWith("cpu  23%", lines[0].Text);
+        Assert.StartsWith("\u2193   61.0 Mbps", lines[1].Text);
         Assert.EndsWith(" pk 61", lines[1].Text);
-        Assert.StartsWith("\u2191     2.1 Mbps", lines[2].Text);
+        Assert.StartsWith("\u2191    2.1 Mbps", lines[2].Text);
         Assert.All(lines, l => Assert.Equal(Layout.Width, l.Length));
         // graph columns are braille
         Assert.All(lines[0].Text.Substring(Layout.GraphCol, Layout.GraphChars), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
@@ -44,7 +44,7 @@ public class ComposerTests
     public void LoadAbove100_IsLimited()
     {
         var lines = new StatusComposer().Compose(Snap(0, load: 130), new EmberSettings());
-        Assert.StartsWith("cpu  100%", lines[0].Text);
+        Assert.StartsWith("cpu 100%", lines[0].Text);
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public class ComposerTests
         List<Line> lines = new();
         for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, gpus: gpus), new EmberSettings());
         int h = lines.FindIndex(l => l.Text.StartsWith("\u2500 G P U"));
-        Assert.StartsWith("rtx   64%  71\u00B0", lines[h + 1].Text);
+        Assert.StartsWith("rtx  64%  71\u00B0 ", lines[h + 1].Text);
         Assert.Equal(7, lines[h + 2].Pid);
     }
 

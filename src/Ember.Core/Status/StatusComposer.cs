@@ -181,7 +181,7 @@ public sealed class StatusComposer
             {
                 double loss = gwLoss ? q.GatewayLoss : q.InternetLoss;
                 string where = gwLoss ? "local" : "isp";
-                lines.Add(new LineBuilder().Dim("  loss").PadTo(Layout.ValueCol + 4)
+                lines.Add(new LineBuilder().Dim("  loss").PadTo(Layout.FieldCol)
                     .Add(Format.Percent(loss, 4), Gradient.Color(loss, t.PacketLoss.Warn, t.PacketLoss.Crit))
                     .Dim("  " + where).Build());
             }
@@ -193,7 +193,7 @@ public sealed class StatusComposer
     }
 
     private static Line PingLine(string where, double ms, Threshold th)
-        => new LineBuilder().Dim("  ping").PadTo(Layout.ValueCol + 4)
+        => new LineBuilder().Dim("  ping").PadTo(Layout.FieldCol)
             .Add((Format.Int(ms) + " ms").PadLeft(7), Gradient.Color(ms, th.Warn, th.Crit))
             .Dim("  " + where).Build();
 
@@ -239,7 +239,7 @@ public sealed class StatusComposer
 
             string label = GpuNames.ShortLabel(g.Name, g.Integrated);
             labelCount[label] = labelCount.GetValueOrDefault(label) + 1;
-            if (labelCount[label] > 1) label += labelCount[label];
+            if (labelCount[label] > 1) label = label[..Math.Min(2, label.Length)] + labelCount[label];
 
             var b = new LineBuilder();
             b.Dim(label).PadTo(Layout.ValueCol);
@@ -282,7 +282,7 @@ public sealed class StatusComposer
         if (it.MemAvailable && _vis.Update("mem.avail", availCond, now))
         {
             var c = Gradient.Color(availPct, t.AvailableRam.Warn, t.AvailableRam.Crit);
-            block.Add(new LineBuilder().Dim("ram").PadTo(Layout.ValueCol)
+            block.Add(new LineBuilder().Dim("ram").PadTo(Layout.TextCol)
                 .Add(Format.Bytes(m.AvailBytes), c).Dim(" available")
                 .Right(new Run(Format.Percent(availPct, 4), c)).Build());
         }
@@ -292,7 +292,7 @@ public sealed class StatusComposer
         if (it.MemCommit && _vis.Update("mem.commit", commitCond, now))
         {
             var c = Gradient.Color(commitPct, t.Commit.Warn, t.Commit.Crit);
-            block.Add(new LineBuilder().Dim("cmt").PadTo(Layout.ValueCol)
+            block.Add(new LineBuilder().Dim("cmt").PadTo(Layout.TextCol)
                 .Bright(GiB(m.CommitBytes) + "/" + GiB(m.CommitLimitBytes)).Dim(" GB commit")
                 .Right(new Run(Format.Percent(commitPct, 4), c)).Build());
         }
@@ -301,7 +301,7 @@ public sealed class StatusComposer
         if (it.MemPageFaults && m.PagesInPerSec != null && _vis.Update("mem.pf", pfCond, now))
         {
             double pf2 = m.PagesInPerSec.Value;
-            block.Add(new LineBuilder().Dim("pgin").PadTo(Layout.ValueCol)
+            block.Add(new LineBuilder().Dim("pgin").PadTo(Layout.TextCol)
                 .Add(Format.Int(pf2), Gradient.Color(pf2, t.PageFaults.Warn, t.PageFaults.Crit)).Dim("/s hard faults").Build());
         }
 
@@ -338,7 +338,7 @@ public sealed class StatusComposer
                 if (!vis) continue;
                 anyBusy = true;
                 var b = new LineBuilder();
-                b.Dim(d.Label).PadTo(Layout.ValueCol)
+                b.Dim(d.Label).PadTo(Layout.TextCol)
                  .Add(Format.Percent(d.ActivePercent, 4), Gradient.Color(d.ActivePercent, t.DiskActive.Warn, t.DiskActive.Crit))
                  .Dim("  q ")
                  .Add(d.Queue.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture), Gradient.Color(d.Queue, t.DiskQueue.Warn, t.DiskQueue.Crit))
@@ -359,7 +359,7 @@ public sealed class StatusComposer
                 if (!_vis.Update("vol." + v.Root, cond, now)) continue;
                 double sev = Math.Max(Gradient.Severity(pct, t.FreeSpacePercent.Warn, t.FreeSpacePercent.Crit), lowGb ? 1 : 0);
                 var c = Gradient.Color(sev);
-                block.Add(new LineBuilder().Dim(v.Root.TrimEnd('\\')).PadTo(Layout.ValueCol)
+                block.Add(new LineBuilder().Dim(v.Root.TrimEnd('\\')).PadTo(Layout.TextCol)
                     .Add(Format.Bytes(v.FreeBytes), c).Dim(" free")
                     .Right(new Run(Format.Percent(pct, 4), c)).Build());
             }

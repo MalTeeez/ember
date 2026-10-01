@@ -142,9 +142,9 @@ public sealed class ClaudeTracker
 
     public static string ModelLabel(string model) => model.ToLowerInvariant() switch
     {
-        "opus" => "opus",
+        "opus" => "op",
         "sonnet" => "son",
         "haiku" => "hai",
-        var m => m.Length <= 4 ? m : m[..4],
+        var m => m.Length <= 3 ? m : m[..3],
     };
 }

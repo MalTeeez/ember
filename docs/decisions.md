@@ -23,7 +23,7 @@ Rule: when the spec is silent, choose the simplest option.
 | C2 | `User-Agent: Ember/<version>`. | Honest client name. |
 | C3 | The credentials file is read again before each poll. `expiresAt` (ms) in the past = hide, no request. | Claude Code refreshes the file itself. Ember never refreshes. |
 | C4 | HTTP 429 also hides the lines (the spec says a failed request hides them). The interval doubles up to a maximum of 1 h. | Spec: "double the interval until a request succeeds". A maximum stops a stuck widget. |
-| C5 | Per-model lines: every `seven_day_<x>` object except `seven_day_oauth_apps`. Labels: `opus`, `son` (sonnet), `hai` (haiku), else the first 4 letters. Same two-line layout as `wk`, with the window-average rate. | Simplest consistent layout. |
+| C5 | Per-model lines: every `seven_day_<x>` object except `seven_day_oauth_apps`. Labels (3 columns): `op` (opus), `son` (sonnet), `hai` (haiku), else the first 3 letters. Same two-line layout as `wk`, with the window-average rate. | Simplest consistent layout. |
 | C6 | Projection colour: severity of (time to reset ÷ time to limit), warning 1, critical 2. The spec example (limit in 1 h, reset in 4 h → ratio 4) is red. | The spec gives no numbers for this gradient. |
 | C7 | The 5h rate uses the samples from 30 min ago to now. A new window (reset time moves by more than 5 min) or a drop in usage clears the history. | Spec: "last 30 min of the widget's own samples". |
 | C8 | Usage bars are 20 cells wide and monochrome. The "lasts" / "limit 1h00" / "—" text is right-aligned on the second line. | Matches the spec example (42 % = 8⅜ cells). The spec gives no threshold for used %. |
@@ -96,3 +96,14 @@ Rule: when the spec is silent, choose the simplest option.
 | P2 | When more than one adapter has traffic (≥ 1 KB/s), one dim line per adapter shows below the totals: `└ name ↓61M ↑2.1M`. Uses the show/hide delay. | Spec: "Show the adapter name only when more than one physical adapter has traffic". The totals stay as they are. |
 | P3 | Down/up value and peak use the unit of the peak (kbps, Mbps, Gbps; bits, base 1000). Graph scale = peak of the last 24 s. | Keeps the peak at 1–999 so `pk 61` fits; graph and numbers have the same scale. |
 | P4 | Ping: gateway = IPv4 default gateway of the first active non-tunnel interface, read every minute; internet host is a setting (default 1.1.1.1); timeout 1 s. Loss line says `local` (loss at the gateway) or `isp` (loss only to the internet). Latency lines `ping … lan` / `ping … isp`. | Spec. |
+
+## Layout and style
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| L1 | Column grid (32 columns): label 0–2, value 3–7 (right aligned), unit or temperature 8–12, space, graph 14–25 (12 braille = 24 samples), peak 26–31. Lines without a graph (memory, disk) put the value at column 5 and right-align the percentage. | Aligns all graphs; close to the spec example. |
+| L2 | Braille level: 0 = one bottom dot (baseline), then 2–4 dots at ⅓, ⅔ and full scale (rounded). Missing history at the left is a blank braille cell. The colour of a graph cell is the gradient of its larger sample. | btop look; spec: 2 samples × 4 levels. |
+| L3 | Colours: bright #E8E8E8, dim #808080, amber #FFB000, red #FF453A. The gradient starts one (critical − warning) span below the warning value. | The spec says "smoothly from normal to amber at the warning threshold" without a start point. |
+| L4 | A blank line goes before each section header. | As in the spec example. |
+| L5 | Font: setting "Cascadia Mono" (default), then Consolas, then Courier New. Characters that the font does not have (checked with `GetGlyphIndices`) are drawn with Segoe UI Symbol in their cell. Anti-aliased grayscale text (ClearType cannot be used on a transparent background). | Windows 10 has no Cascadia Mono and Consolas has no braille. |
+| L6 | Opacity applies to the whole widget (and to notes) through the layered-window constant alpha. In edit mode the widget has a 75 % dark background. | Simplest. |
