@@ -184,4 +184,6 @@ These decisions replace older ones where they conflict (noted in brackets).
 | Z10 | **Notes:** `>` is a quote (italic, label colour) without indent; `>>` indents one step, `>>>` two. [replaces V19 quote indent] | Requested. |
 | Z11 | **Process details:** the values are read-only edit controls in the theme colours: select with the mouse, copy with Ctrl+C or the context menu. Esc still closes the window. | Requested copyable text. |
 | Z12 | **Font log:** only problems (missing glyphs or no icon font), once per font setup. | Normal start-up logged a line each time. |
+| Z13 | **Disk activity line:** `C:   busy graph  98% queue 3.0`. Name = drive letter; a disk with more partitions shows up to 3 letters (`D:E:F:`); no letter: `disk2`. The name column is as wide as the longest name. Metric names before their values; the busy graph fills the free space. [replaces `d0  66% q 1.0  C:`] | Requested readability. |
+| Z14 | **Memory lines:** `ram  disk paging graph 983/s` (PDH `Memory\Pages Input/sec`/sec = hard page faults) and `ram   35G of 40G committed  87%`. [replaces `pgin` and `cmt`] | Requested readability. |
 

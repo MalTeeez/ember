@@ -590,8 +590,9 @@ public sealed class StatusComposer
             {
                 any = true;
                 var c = _c.Severity(commitPct, t.Commit.Warn, t.Commit.Crit);
-                var b = Label("cmt", _c.Memory);
-                Val(b, Format.Bytes4(m.CommitBytes), c).Add(" / " + Format.Bytes4(m.CommitLimitBytes).Trim() + " commit", _c.Unit)
+                // "ram   35G of 40G committed  87%" — commit charge and its limit (RAM + page file).
+                var b = Label("ram", _c.Memory);
+                Val(b, Format.Bytes4(m.CommitBytes), c).Add(" of " + Format.Bytes4(m.CommitLimitBytes).Trim() + " committed", _c.Unit)
                     .Right(new Run(Format.Pct4(commitPct), c, ValueStyle));
                 items["mem.commit"] = new() { b.Build() };
             }
@@ -600,12 +601,19 @@ public sealed class StatusComposer
 
         if (On("mem.pagein") && m.PagesInPerSec is { } pf)
         {
+            // "ram  disk paging ⣀⣠⣴⣶⣿  983/s" — pages read from disk (hard page faults) per second.
+            var h = Hist("mem.pf");
+            h.Add(Math.Max(0, pf));
             bool cond = t.PageFaults.Crossed(pf);
             if (Vis("mem.pf", cond))
             {
                 any = true;
-                var b = Label("pgin", _c.Memory);
-                Val(b, Format.Count4(pf), _c.Severity(pf, t.PageFaults.Warn, t.PageFaults.Crit)).Add(" /s hard faults", _c.Unit);
+                var b = Label("ram", _c.Memory);
+                b.Add("disk paging", _c.Unit);
+                string value = Format.Count4(pf) + "/s";
+                Graph(b, h.Values, Math.Max(h.Max, t.PageFaults.Crit), _c.Memory, b.Column + 1, Layout.Width - value.Length - 1 - b.Column - 1);
+                b.Add(" ", _c.Dim);
+                Val(b, value, _c.Severity(pf, t.PageFaults.Warn, t.PageFaults.Crit));
                 items["mem.pagein"] = new() { b.Build() };
             }
             pending |= cond || _vis.IsPending("mem.pf");
@@ -629,20 +637,29 @@ public sealed class StatusComposer
 
         if (On("disk.busy") && s.Disks != null)
         {
+            // "C:   busy ⣀⣠⣴⣶⣿⣿  98% queue 3.0" — drive letter(s), busy time with graph, queue length.
+            var names = s.Disks.Select(d => Util.DiskNames.Display(d.Label, d.Volumes)).ToList();
+            int nameW = Math.Clamp(names.Max(n => n.Length) + 1, 4, 8);
             var lines = new List<Line>();
-            foreach (var d in s.Disks)
+            for (int i = 0; i < s.Disks.Count; i++)
             {
+                var d = s.Disks[i];
                 string key = "disk." + d.Label;
+                var h = Hist(key);
+                h.Add(Math.Clamp(d.ActivePercent, 0, 100));
                 bool cond = t.DiskActive.Crossed(d.ActivePercent) || t.DiskQueue.Crossed(d.Queue);
                 bool vis = Vis(key, cond);
                 pending |= cond || _vis.IsPending(key);
                 if (!vis) continue;
                 anyBusy = true;
-                var b = Label(d.Label, _c.Disk);
+                var b = new LineBuilder();
+                b.Add(names[i], _c.Disk).PadTo(nameW);
+                b.Add("busy", _c.Unit);
+                const int right = 4 + 6 + 4; // load, " queue", queue value
+                Graph(b, h.Values, 100, _c.Disk, b.Column + 1, Layout.Width - right - b.Column - 1);
                 Val(b, Format.Pct4(d.ActivePercent), _c.Severity(d.ActivePercent, t.DiskActive.Warn, t.DiskActive.Crit));
-                b.Add(" q", _c.Unit);
+                b.Add(" queue", _c.Unit);
                 Val(b, Format.Num4(d.Queue), _c.Severity(d.Queue, t.DiskQueue.Warn, t.DiskQueue.Crit));
-                b.Add("  " + d.Volumes, _c.Unit);
                 lines.Add(b.Build());
             }
             items["disk.busy"] = lines;

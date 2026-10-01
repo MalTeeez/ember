@@ -537,3 +537,48 @@ public class RowBackgroundTests
         Assert.Equal("457k pkt", Format.Pkt(457_000));
     }
 }
+
+public class DiskMemoryLineTests
+{
+    private static readonly DateTime T0 = new(2026, 10, 1, 12, 0, 0);
+
+    [Fact]
+    public void DiskNames_Readable()
+    {
+        Assert.Equal("C:", Ember.Core.Util.DiskNames.Display("d0", "C:"));
+        Assert.Equal("D:E:", Ember.Core.Util.DiskNames.Display("d1", "D: E:"));
+        Assert.Equal("D:E:F:", Ember.Core.Util.DiskNames.Display("d1", "D: E: F: G:"));
+        Assert.Equal("disk2", Ember.Core.Util.DiskNames.Display("d2", ""));
+    }
+
+    [Fact]
+    public void BusyDisk_LetterMetricGraphValue()
+    {
+        var cfg = new EmberSettings();
+        cfg.Layout.HoldSeconds = 0;
+        var c = new StatusComposer();
+        List<Ember.Core.Render.Line> lines = new();
+        for (int i = 0; i <= 6; i++)
+            lines = c.Compose(new Snapshot { Time = T0.AddSeconds(i), Disks = new() { new("d1", "C:", 100, 3) } }, cfg);
+        var l = lines.Single(x => x.Text.StartsWith("C:"));
+        Assert.StartsWith("C:  busy ", l.Text);
+        Assert.EndsWith("100% queue 3.0", l.Text);
+        Assert.Contains(l.Text[9], "⠀⣿".ToCharArray().Concat(Enumerable.Range(0x2800, 256).Select(x => (char)x)));
+        Assert.Equal(Layout.Width, l.Length);
+    }
+
+    [Fact]
+    public void PageFaults_SpelledOut()
+    {
+        var cfg = new EmberSettings();
+        cfg.Layout.HoldSeconds = 0;
+        var c = new StatusComposer();
+        const ulong G = 1024UL * 1024 * 1024;
+        List<Ember.Core.Render.Line> lines = new();
+        for (int i = 0; i <= 6; i++)
+            lines = c.Compose(new Snapshot { Time = T0.AddSeconds(i), Mem = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = G, CommitLimitBytes = 32 * G, PagesInPerSec = 6000 } }, cfg);
+        var l = lines.Single(x => x.Text.Contains("disk paging"));
+        Assert.StartsWith("ram  disk paging ", l.Text);
+        Assert.EndsWith("6.0k/s", l.Text);
+    }
+}

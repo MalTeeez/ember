@@ -48,6 +48,18 @@ public static partial class DiskNames
         if (!m.Success) return null;
         return ("d" + m.Groups[1].Value, m.Groups[2].Value.Trim());
     }
+
+    /// <summary>
+    /// Readable name of a physical disk: its drive letter ("C:"); with more partitions up to 3 letters
+    /// ("C:D:", "C:D:E:"); without a letter "disk0".
+    /// </summary>
+    public static string Display(string label, string volumes)
+    {
+        var letters = volumes.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(v => v.TrimEnd(':', '\\')).Where(v => v.Length == 1 && char.IsLetter(v[0])).ToList();
+        if (letters.Count == 0) return "disk" + label.TrimStart('d');
+        return string.Concat(letters.Take(3).Select(l => char.ToUpperInvariant(l[0]) + ":"));
+    }
 }
 
 public static class CpuNames
