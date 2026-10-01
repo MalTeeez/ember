@@ -87,3 +87,12 @@ Rule: when the spec is silent, choose the simplest option.
 | N4 | Positions and sizes: `%APPDATA%\Ember\notes\notes.json` (screen pixels). Text: `<id>.md` with CRLF line ends. Id = creation time plus 4 random hex digits. | Spec: one `.md` file per note. A note whose position is off screen moves to the primary monitor. |
 | N5 | Default hotkey for a new note: Ctrl+Alt+N. A hotkey that another program has is logged and ignored. | The spec gives no default. |
 | N6 | Known limit: Ctrl+Z can also undo a styling step. | RichEdit records formatting in its undo stack. |
+
+## Network
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| P1 | Physical adapter = `ConnectorPresent`, not a filter row (`FilterInterface`), not loopback/tunnel/PPP type, `TunnelType` none, and no excluded word in description or alias (case-insensitive). | Spec rules, plus the WFP/QoS filter rows that GetIfTable2 also returns for each physical adapter. |
+| P2 | When more than one adapter has traffic (≥ 1 KB/s), one dim line per adapter shows below the totals: `└ name ↓61M ↑2.1M`. Uses the show/hide delay. | Spec: "Show the adapter name only when more than one physical adapter has traffic". The totals stay as they are. |
+| P3 | Down/up value and peak use the unit of the peak (kbps, Mbps, Gbps; bits, base 1000). Graph scale = peak of the last 24 s. | Keeps the peak at 1–999 so `pk 61` fits; graph and numbers have the same scale. |
+| P4 | Ping: gateway = IPv4 default gateway of the first active non-tunnel interface, read every minute; internet host is a setting (default 1.1.1.1); timeout 1 s. Loss line says `local` (loss at the gateway) or `isp` (loss only to the internet). Latency lines `ping … lan` / `ping … isp`. | Spec. |

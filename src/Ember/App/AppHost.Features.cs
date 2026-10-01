@@ -12,6 +12,7 @@ internal sealed partial class AppHost
 
     private ClaudePoller? _claude;
     private Ui.NotesManager? _notes;
+    private PingMonitor? _ping;
     private string _hotkey = "";
     private string _noteLayoutKey = "";
 
@@ -24,6 +25,8 @@ internal sealed partial class AppHost
         _noteLayoutKey = NoteLayoutKey(_settings);
         RegisterNoteHotkey(_settings.Notes.NewNoteHotkey);
 
+        _ping = new PingMonitor();
+        _ping.Configure(_settings.Items.NetworkQuality && _settings.Items.Network, _settings.Network.InternetHost);
         _claude = new ClaudePoller(Paths.ClaudeCredentials);
         _claude.Configure(_settings.Items.Claude, _settings.Intervals.ClaudeSeconds);
         if (_settings.Items.Claude) _claude.Start();
@@ -32,11 +35,13 @@ internal sealed partial class AppHost
     private void PauseFeatures()
     {
         _claude?.Pause();
+        _ping?.Pause();
     }
 
     private void ResumeFeatures()
     {
         _claude?.Resume();
+        _ping?.Resume();
     }
     private void ReattachFeatures() => _notes?.Reattach();
     private void BringFeaturesToFront() => _notes?.BringToFront();
@@ -58,12 +63,15 @@ internal sealed partial class AppHost
         W.UnregisterHotKey(Handle, NewNoteHotkeyId);
         _claude?.Dispose();
         _claude = null;
+        _ping?.Dispose();
+        _ping = null;
     }
 
     private void OnSettingsChanged(EmberSettings s)
     {
         _claude?.Configure(s.Items.Claude, s.Intervals.ClaudeSeconds);
         RegisterNoteHotkey(s.Notes.NewNoteHotkey);
+        _ping?.Configure(s.Items.NetworkQuality && s.Items.Network, s.Network.InternetHost);
         string key = NoteLayoutKey(s);
         if (key != _noteLayoutKey)
         {
@@ -109,6 +117,7 @@ internal sealed partial class AppHost
     private Snapshot Decorate(Snapshot s)
     {
         if (_settings.Items.Claude) s.Claude = _claude?.Lines(DateTimeOffset.UtcNow);
+        if (_settings.Items.NetworkQuality) s.Quality = _ping?.Quality();
         return s;
     }
 }
