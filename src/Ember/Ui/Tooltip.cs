@@ -15,6 +15,8 @@ internal sealed class Tooltip : Win32Window
     private static Tooltip? _shared;
     private string _text = "";
     private POINT _at;
+    private SIZE _size;
+    private float _scale = 1;
 
     public static Tooltip Shared
     {
@@ -40,7 +42,15 @@ internal sealed class Tooltip : Win32Window
     public void Show(string text, POINT at)
     {
         if (!IsAlive || string.IsNullOrEmpty(text)) { Hide(); return; }
-        if (text == _text && at.X == _at.X && at.Y == _at.Y && W.IsWindowVisible(Handle)) return;
+        if (text == _text && W.IsWindowVisible(Handle))
+        {
+            // Same text: only follow the cursor (no new drawing), and not for small moves.
+            if (Math.Abs(at.X - _at.X) + Math.Abs(at.Y - _at.Y) < 3) return;
+            _at = at;
+            var p = Place(at, _size.CX, _size.CY, _scale);
+            W.SetWindowPos(Handle, new IntPtr(-1), p.X, p.Y, 0, 0, W.SWP_NOSIZE | W.SWP_NOACTIVATE);
+            return;
+        }
         _text = text;
         _at = at;
         var mon = W.MonitorFromPoint(at, W.MONITOR_DEFAULTTONEAREST);
@@ -78,14 +88,9 @@ internal sealed class Tooltip : Win32Window
         Gdip.GdipDeleteFont(font);
         Gdip.GdipDeleteFontFamily(family);
 
-        var work = Monitors.All().FirstOrDefault(m => m.Handle == mon).Work;
-        int x = at.X + (int)(14 * scale), y = at.Y + (int)(18 * scale);
-        if (work.Width > 0)
-        {
-            x = Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - w));
-            if (y + h > work.Bottom) y = at.Y - h - (int)(6 * scale);
-        }
-        var pos = new POINT(x, y);
+        _scale = scale;
+        _size = new SIZE(w, h);
+        var pos = Place(at, w, h, scale);
         var size = new SIZE(w, h);
         var src = new POINT(0, 0);
         var blend = new BLENDFUNCTION { BlendOp = W.AC_SRC_OVER, SourceConstantAlpha = 255, AlphaFormat = W.AC_SRC_ALPHA };
@@ -96,6 +101,20 @@ internal sealed class Tooltip : Win32Window
         W.DeleteObject(dib);
         W.DeleteDC(dc);
         W.SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, W.SWP_NOMOVE | W.SWP_NOSIZE | W.SWP_NOACTIVATE | W.SWP_SHOWWINDOW);
+    }
+
+    /// <summary>Below-right of the point, inside the monitor's work area.</summary>
+    private static POINT Place(POINT at, int w, int h, float scale)
+    {
+        var mon = W.MonitorFromPoint(at, W.MONITOR_DEFAULTTONEAREST);
+        var work = Monitors.All().FirstOrDefault(m => m.Handle == mon).Work;
+        int x = at.X + (int)(14 * scale), y = at.Y + (int)(18 * scale);
+        if (work.Width > 0)
+        {
+            x = Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - w));
+            if (y + h > work.Bottom) y = at.Y - h - (int)(6 * scale);
+        }
+        return new POINT(x, y);
     }
 
     public void Hide()

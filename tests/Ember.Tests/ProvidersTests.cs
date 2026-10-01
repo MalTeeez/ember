@@ -226,7 +226,7 @@ public class ProviderComposeTests
         int h = lines.FindIndex(l => l.Text.StartsWith("── devices"));
         Assert.True(h >= 0);
         // Name too long: brand and kind; charging icon before the value.
-        Assert.StartsWith("Razer mouse ", lines[h + 1].Text);
+        Assert.StartsWith("Razer Mouse ", lines[h + 1].Text);
         Assert.Contains(lines[h + 1].Runs, r => r.Style == RunStyle.Icon && r.Text[0] == Icons.BatteryCharging);
         Assert.EndsWith(" 12%", lines[h + 1].Text);
         Assert.Contains(lines[h + 1].Runs, r => r.Color == Rgb.Parse(cfg.Theme.Crit, Palette.Red));
@@ -235,7 +235,7 @@ public class ProviderComposeTests
         cfg.Fields.BatteryAlways = false;
         cfg.Intervals.ShowDelaySeconds = 0;
         var low = new StatusComposer().Compose(s, cfg);
-        Assert.Contains(low, l => l.Text.StartsWith("Razer mouse"));
+        Assert.Contains(low, l => l.Text.StartsWith("Razer Mouse"));
         Assert.DoesNotContain(low, l => l.Text.StartsWith("Buds"));
     }
 

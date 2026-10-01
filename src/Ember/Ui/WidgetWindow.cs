@@ -333,7 +333,7 @@ internal sealed class WidgetWindow : Win32Window
         bool need = !EditMode && _hits.Count > 0 && !Hidden;
         if (need && !_hoverTimer)
         {
-            W.SetTimer(Handle, (UIntPtr)HoverTimer, 100, IntPtr.Zero);
+            W.SetTimer(Handle, (UIntPtr)HoverTimer, 50, IntPtr.Zero);
             _hoverTimer = true;
         }
         else if (!need && _hoverTimer)
@@ -409,7 +409,7 @@ internal sealed class WidgetWindow : Win32Window
             }
 
             case W.WM_SETCURSOR:
-                if (W.GetCursorPos(out var sp) && HitAtScreen(sp) is var hi && hi >= 0 && _hits[hi].Hit.Action != HitAction.Drag)
+                if (W.GetCursorPos(out var sp) && HitAtScreen(sp) is var hi && hi >= 0 && _hits[hi].Hit.Action is not (HitAction.Drag or HitAction.None))
                 {
                     W.SetCursor(W.LoadCursor(IntPtr.Zero, W.IDC_HAND));
                     return (IntPtr)1;

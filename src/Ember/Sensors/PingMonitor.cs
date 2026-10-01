@@ -27,6 +27,7 @@ internal sealed class PingMonitor : IDisposable
     private DateTime _traceTime = DateTime.MinValue;
     private IReadOnlyList<TraceHop>? _hops;
     private const int MaxHops = 20;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> HostNames = new();
 
     public void Configure(bool enabled, string host, bool trace = false)
     {
@@ -149,7 +150,18 @@ internal sealed class PingMonitor : IDisposable
             list.Add(h);
             if (h.Address != null && (h.Address == target || h.Address == host)) break;
         }
-        return list;
+        // Reverse DNS names for the tooltips (cached; at most 1 s for all new ones).
+        var names = list.Where(h => h.Address != null && !HostNames.ContainsKey(h.Address)).Select(async h =>
+        {
+            try
+            {
+                var e = await Dns.GetHostEntryAsync(h.Address!).WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+                HostNames[h.Address!] = e.HostName != h.Address ? e.HostName : "";
+            }
+            catch (Exception) { HostNames[h.Address!] = ""; }
+        });
+        await Task.WhenAll(names).ConfigureAwait(false);
+        return list.Select(h => h.Address != null && HostNames.TryGetValue(h.Address, out var n) && n.Length > 0 ? h with { HostName = n } : h).ToList();
     }
 
     /// <summary>IPv4 default gateway of the first active physical interface.</summary>

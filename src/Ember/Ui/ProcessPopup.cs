@@ -140,7 +140,7 @@ internal sealed class ProcessPopup : Win32Window
             return;
         }
         _title = p.Name;
-        _subtitle = $"PID {_pid.ToString(inv)}  ·  parent {p.ParentPid.ToString(inv)}";
+        _subtitle = $"PID {_pid.ToString(inv)}   parent {p.ParentPid.ToString(inv)}";
         _rows.Add(("Path", ProcessInfo.ImagePath(_pid) ?? "—"));
         _rows.Add(("Command", ProcessInfo.CommandLine(_pid) ?? "—"));
         if (a is { } old && old.CreateTime == p.CreateTime && sec > 0)

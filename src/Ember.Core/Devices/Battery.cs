@@ -133,15 +133,16 @@ public static class DeviceNames
         return "device";
     }
 
-    /// <summary>"Razer mouse" (brand and kind) for names that are too long; a number when several are the same.</summary>
+    /// <summary>"Razer Mouse" (brand and kind) for names that are too long; a number when several are the same.</summary>
     public static List<string> Display(IReadOnlyList<DeviceBattery> devices, int width)
     {
         var names = devices.Select(d =>
         {
             if (d.Name.Length <= width) return d.Name;
             string kind = Kind(d.Name);
+            kind = char.ToUpperInvariant(kind[0]) + kind[1..]; // "Razer Mouse"
             string brand = d.Brand.Length > 0 ? d.Brand : Brand(d.Name, d.Source);
-            return brand.Length > 0 ? brand + " " + kind : char.ToUpperInvariant(kind[0]) + kind[1..];
+            return brand.Length > 0 ? brand + " " + kind : kind;
         }).ToList();
         foreach (var dup in names.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key).ToList())
         {

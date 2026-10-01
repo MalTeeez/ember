@@ -117,8 +117,18 @@ public sealed class StatusComposer
         return p;
     }
 
+    private EmberSettings? _cfgRef;
+
     public List<Line> Compose(Snapshot s, EmberSettings cfg, ComposeContext? ctx = null)
     {
+        // New settings (the app gives a new object for each change): no kept space from before, so a
+        // switched-off line or option goes away at once instead of after the hold time.
+        if (_cfgRef != null && !ReferenceEquals(cfg, _cfgRef))
+        {
+            _keep.Clear();
+            _trace?.Invoke("settings changed: kept space released");
+        }
+        _cfgRef = cfg;
         _cfg = cfg;
         _now = s.Time;
         _preview = cfg.PreviewAll;
@@ -586,15 +596,19 @@ public sealed class StatusComposer
         foreach (var (hop, skipped) in Traceroute.Collapse(hops, target))
         {
             var b = new LineBuilder();
-            b.Add("  └ ", _c.Dim).Add(skipped > 0 ? "*" : " ", _c.Warn)
-             .Add(hop.Ttl.ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(2), _c.Unit).Add("  ", _c.Dim);
-            string ms = hop.Ms is { } v ? Format.Num4(v) + " ms" : "";
-            b.Add(Format.FitDots(hop.Address ?? "?", Layout.Width - b.Column - ms.Length - 1), _c.Label);
+            string ttl = hop.Ttl.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string tip = $"Hop {ttl}: {hop.Address}" + (hop.HostName is { Length: > 0 } hn ? $" ({hn})" : "") +
+                         (hop.Ms is { } rt ? $", {rt:0.#} ms" : "") +
+                         (skipped > 0 ? $"\n{skipped} hop{(skipped == 1 ? "" : "s")} before it did not answer" : "") +
+                         (hop.Address == target ? "\nTarget" : "");
+            b.LineHit(HitAction.None, hop.Address ?? "", tip);
+            b.Add("  └ ", _c.Dim).Add(skipped > 0 ? "*" : " ", _c.Warn).Add(ttl.PadLeft(2), _c.Unit).Add(" ", _c.Dim);
+            // The address gets all space up to the value (long IPv6 addresses); one space before the value.
+            string value = hop.Ms is { } v ? Format.Num4(v).Trim() : "";
+            int valueWidth = value.Length > 0 ? 1 + value.Length + 3 : 0;
+            b.Add(Format.FitDots(hop.Address ?? "?", Layout.Width - b.Column - valueWidth).TrimEnd(), _c.Label);
             if (hop.Ms is { } m)
-            {
-                b.Add(" ", _c.Dim);
-                Val(b, Format.Num4(m), _c.Severity(m, th.Warn, th.Crit)).Add(" ms", _c.Unit);
-            }
+                b.Right(new Run(" ", _c.Dim), new Run(value, _c.Severity(m, th.Warn, th.Crit), ValueStyle), new Run(" ms", _c.Unit));
             yield return b.Build();
         }
     }
@@ -716,7 +730,7 @@ public sealed class StatusComposer
                 any = true;
                 var c = _c.Severity(commitPct, t.Commit.Warn, t.Commit.Crit);
                 // Commit = RAM + page file in use; the page file has its own line under it.
-                var lines = new List<Line> { AmountLine("commit", m.CommitBytes, m.CommitLimitBytes, c) };
+                var lines = new List<Line> { AmountLine("committed", m.CommitBytes, m.CommitLimitBytes, c) };
                 if (m.PageFileTotalBytes is { } pft && pft > 0 && m.PageFileUsedBytes is { } pfu)
                 {
                     double pfPct = 100.0 * pfu / pft;
@@ -777,22 +791,46 @@ public sealed class StatusComposer
     private Line AmountLine(string name, double amount, double total, Rgb color)
     {
         var b = new LineBuilder();
-        b.Add(name, _c.Memory).PadTo(9); // "used", "commit", "pagefile": same columns
+        b.Add(name, _c.Memory).PadTo(10); // "used", "committed", "pagefile": same columns
         return AmountRest(b, amount, total, color);
     }
 
     /// <summary>"35GB / 40GB ▮▮▮▮▮▯  87%" after a name: amount, total, bar to the right edge, percent.</summary>
-    private Line AmountRest(LineBuilder b, double amount, double total, Rgb color, double? percent = null)
+    private Line AmountRest(LineBuilder b, double amount, double total, Rgb color, bool highIsGood = false)
     {
-        double pct = percent ?? (total > 0 ? 100 * amount / total : 0);
+        double pct = total > 0 ? 100 * amount / total : 0;
         Val(b, Format.BytesB(amount), color);
         b.Add(" / " + Format.BytesB(total).Trim(), _c.Unit).Add(" ", _c.Dim);
         int barWidth = Layout.Width - b.Column - 1 - Layout.FieldWidth;
-        var (bar, filled) = Glyphs.StyledBar(pct / 100, Math.Max(1, barWidth), _c.Theme.BarStyle);
-        for (int i = 0; i < bar.Length; i++) b.Add(bar[i].ToString(), i < filled ? color : _c.Dim, RunStyle.None, BarBack);
+        LevelBar(b, pct / 100, Math.Max(1, barWidth), highIsGood, color);
         b.Add(" ", _c.Dim);
         Val(b, Format.Pct4(pct), color);
         return b.Build();
+    }
+
+    /// <summary>
+    /// A level bar (memory, disk space, batteries). Filled cells: the warning/critical colour when the
+    /// value crossed a threshold; else the graph colours by the level (how bad it is), or along the
+    /// bar (by position) with the theme's "bar gradient". Empty cells dim.
+    /// </summary>
+    private void LevelBar(LineBuilder b, double fraction, int width, bool highIsGood, Rgb severityColor)
+    {
+        var theme = _c.Theme;
+        var (bar, filled) = Glyphs.StyledBar(Math.Clamp(fraction, 0, 1), width, theme.BarStyle);
+        double badness = highIsGood ? 1 - fraction : fraction;
+        for (int i = 0; i < bar.Length; i++)
+        {
+            Rgb cell;
+            if (i >= filled) cell = _c.Dim;
+            else if (severityColor != _c.Text) cell = severityColor;
+            else if (theme.BarGradient)
+            {
+                double pos = (i + 0.5) / width;
+                cell = Rgb.Stops(_c.GraphStops, highIsGood ? 1 - pos : pos);
+            }
+            else cell = Rgb.Stops(_c.GraphStops, Math.Clamp(badness, 0, 1));
+            b.Add(bar[i].ToString(), cell, RunStyle.None, BarBack);
+        }
     }
 
     private const int MaxFaultLines = 5;
@@ -892,7 +930,7 @@ public sealed class StatusComposer
                 // "C:  free  14GB / 500GB ▮▯▯  3%" — free space of total, bar and percent free.
                 var b = new LineBuilder();
                 b.Add(v.Root.TrimEnd('\\'), _c.Disk).PadTo(4).Add("free ", _c.Unit);
-                lines.Add(AmountRest(b, v.FreeBytes, v.TotalBytes, c));
+                lines.Add(AmountRest(b, v.FreeBytes, v.TotalBytes, c, highIsGood: true));
             }
             items["disk.free"] = lines;
         }
@@ -962,8 +1000,7 @@ public sealed class StatusComposer
             var c = _c.Severity(d.Percent, th.Warn, th.Crit);
             var b = new LineBuilder();
             b.Add(Format.FitDots(names[i], nameWidth), _c.Device).Add(" ", _c.Dim);
-            var (bar, filled) = Glyphs.StyledBar(d.Percent / 100.0, 8, _c.Theme.BarStyle);
-            for (int k = 0; k < bar.Length; k++) b.Add(bar[k].ToString(), k < filled ? c : _c.Dim, RunStyle.None, BarBack);
+            LevelBar(b, d.Percent / 100.0, 8, highIsGood: true, c);
             b.Add(" ", _c.Dim).Icon(d.Charging == true ? Icons.BatteryCharging : Icons.Battery, d.Charging == true ? _c.Warn : c);
             Val(b, Format.Pct4(d.Percent), c);
             lines.Add(b.Build());

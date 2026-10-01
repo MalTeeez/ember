@@ -68,7 +68,7 @@ public class ComposerTests
             var t = l.Text;
             if (t.StartsWith("DeathAdder") || t.StartsWith("WH-")) continue; // device battery lines: name, bar, %
             // A label is followed by at least one space before its value (labels are at most 4 characters).
-            if (char.IsLetterOrDigit(t[0])) Assert.True(t.IndexOf(' ') is > 0 and <= 8, t);
+            if (char.IsLetterOrDigit(t[0])) Assert.True(t.IndexOf(' ') is > 0 and <= 9, t);
             // Arrow lines: the arrow, then the 4-character value (which starts with a space or a short number).
             if (t[0] is '\u2193' or '\u2191') Assert.Equal(' ', t[1]);
         }
@@ -206,7 +206,7 @@ public class ComposerTests
         Assert.True(h > 0);
         Assert.Equal("", lines[h - 1].Text.Trim());
         // No "ram" label inside the memory section: used / total, bar, percent used.
-        Assert.StartsWith("used      16GB / 16GB ", lines[h + 1].Text);
+        Assert.StartsWith("used       16GB / 16GB ", lines[h + 1].Text);
         Assert.EndsWith(" 97%", lines[h + 1].Text);
     }
 

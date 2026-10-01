@@ -765,7 +765,7 @@ public class V6Tests
         cfg.Entries.First(e => e.Id == "net.quality").Enabled = true;
         cfg.Network.PingAlways = cfg.Network.ShowTraceroute = true;
         var lines = new StatusComposer().Compose(new Snapshot { Time = new DateTime(2026, 10, 1, 12, 0, 0), Quality = new Ember.Core.Net.NetQuality(0, 0, 1, 12, true, "192.168.1.1", "1.1.1.1") { Hops = hops } }, cfg);
-        Assert.Contains(lines, l => l.Text.StartsWith("  └ * 4  10.0.0.1"));
+        Assert.Contains(lines, l => l.Text.StartsWith("  └ * 4 10.0.0.1") && l.Hits.Any(h => h.Tooltip.Contains("2 hops before")));
     }
 
     [Fact]
@@ -795,6 +795,27 @@ public class V6Tests
             new("Logitech MX Anywhere 3 for Business", 70, null, "bluetooth"),
         };
         var n = Ember.Core.Devices.DeviceNames.Display(list, 16);
-        Assert.Equal(new[] { "Razer mouse", "Sony headset", "Logitech mouse 1", "Logitech mouse 2" }, n);
+        Assert.Equal(new[] { "Razer Mouse", "Sony Headset", "Logitech Mouse 1", "Logitech Mouse 2" }, n);
+    }
+}
+
+public class V8Tests
+{
+    [Fact]
+    public void NewSettings_ReleaseKeptSpace()
+    {
+        var cfg = new EmberSettings();
+        cfg.Layout.HoldSeconds = 600;
+        cfg.Entries.First(e => e.Id == "net.quality").Enabled = true;
+        cfg.Network.PingAlways = cfg.Network.ShowTraceroute = true;
+        var hops = new List<Ember.Core.Net.TraceHop> { new(1, "192.168.1.1", 1), new(2, "1.1.1.1", 9) };
+        var q = new Ember.Core.Net.NetQuality(0, 0, 1, 12, true, "192.168.1.1", "1.1.1.1") { Hops = hops };
+        var c = new StatusComposer();
+        var t0 = new DateTime(2026, 10, 1, 12, 0, 0);
+        int with = c.Compose(new Snapshot { Time = t0, Quality = q }, cfg).Count;
+        var off = SettingsStore.Clone(cfg);
+        off.Network.ShowTraceroute = false;
+        int without = c.Compose(new Snapshot { Time = t0.AddSeconds(1), Quality = q }, off).Count;
+        Assert.Equal(with - 2, without);
     }
 }

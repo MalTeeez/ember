@@ -178,7 +178,11 @@ public sealed record NetQuality(double GatewayLoss, double InternetLoss, double?
 }
 
 /// <summary>One traceroute hop: TTL, the answering address (null = no answer) and the round trip.</summary>
-public sealed record TraceHop(int Ttl, string? Address, double? Ms);
+public sealed record TraceHop(int Ttl, string? Address, double? Ms)
+{
+    /// <summary>Reverse DNS name of the address, if known.</summary>
+    public string? HostName { get; init; }
+}
 
 public static class Traceroute
 {
