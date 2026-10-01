@@ -151,6 +151,14 @@ public static class Format
     public static string Int(double v) => Math.Round(v).ToString("0", Inv);
 
     /// <summary>Cut or pad text to exactly <paramref name="width"/> characters. Cut text ends with '…'.</summary>
+    /// <summary>Like <see cref="Fit"/>, but a cut text ends with ".." (process names).</summary>
+    public static string FitDots(string s, int width)
+    {
+        if (width <= 0) return "";
+        if (s.Length <= width) return s.PadRight(width);
+        return width <= 2 ? s[..width] : s[..(width - 2)] + "..";
+    }
+
     public static string Fit(string s, int width)
     {
         if (width <= 0) return "";

@@ -116,7 +116,7 @@ public class ComposerTests
         List<Line> lines = new();
         for (int i = 1; i <= 5; i++) lines = c.Compose(Snap(i, load: 80, topCpu: Procs((42, "game.exe", 58))), cfg);
         var top = lines.Single(l => l.Pid == 42);
-        Assert.StartsWith("  \u2514 game.exe", top.Text);
+        Assert.StartsWith("  \u2514 game ", top.Text);
         Assert.Contains(" 58% ", top.Text);
         Assert.Contains(top.Hits, h => h.Action == HitAction.ProcessKill && h.Arg == "42" && h.Width == 2);
         Assert.Contains(top.Hits, h => h.Action == HitAction.ProcessProperties);

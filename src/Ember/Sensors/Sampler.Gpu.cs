@@ -132,7 +132,7 @@ internal sealed partial class Sampler
     {
         var now = DateTime.UtcNow;
         if (_pidNames.TryGetValue(pid, out var e) && now - e.Time < TimeSpan.FromSeconds(30)) return e.Name;
-        string name = ProcessInfo.Name(pid) ?? ("pid " + pid);
+        string name = ProcessInfo.Name(pid) is { } n ? ProcessTracker.DisplayName(pid, n) : "pid " + pid;
         if (_pidNames.Count > 256) _pidNames.Clear();
         _pidNames[pid] = (name, now);
         return name;

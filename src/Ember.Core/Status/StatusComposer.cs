@@ -244,7 +244,7 @@ public sealed class StatusComposer
         b.LineHit(HitAction.ProcessDetails, pid, $"{p.Name} (PID {pid}) — details");
         string value = p.ValueText.Length > 6 ? p.ValueText[..6] : p.ValueText.PadLeft(4);
         int nameWidth = Layout.Width - 4 - value.Length - 1 - 7;
-        b.Add("  └ ", _c.Dim).Add(Format.Fit(p.Name, nameWidth), _c.Process).Add(" ", _c.Dim);
+        b.Add("  └ ", _c.Dim).Add(Format.FitDots(Util.ProcessNames.StripExe(p.Name), nameWidth), _c.Process).Add(" ", _c.Dim);
         Val(b, value);
         b.Add(" ", _c.Dim);
         b.Button(Icons.Info, _c.Icon, HitAction.ProcessDetails, pid, "Details");
@@ -668,7 +668,7 @@ public sealed class StatusComposer
             b.LineHit(HitAction.ProcessDetails, pid, $"{p.Name} (PID {pid}): {Format.Count4(p.HardFaultsPerSec).Trim()} hard page faults/s");
             string faults = Format.Count4(p.HardFaultsPerSec) + "/s";
             int nameWidth = Layout.Width - 3 - 1 - 5 - 1 - faults.Length;
-            b.Add(" └ ", _c.Dim).Add(Format.Fit(p.Name, nameWidth), _c.Process).PadTo(3 + nameWidth + 1);
+            b.Add(" └ ", _c.Dim).Add(Format.FitDots(Util.ProcessNames.StripExe(p.Name), nameWidth), _c.Process).PadTo(3 + nameWidth + 1);
             // Memory: full colour at a quarter of the RAM.
             double memShare = ram > 0 ? Math.Min(1, 4 * p.PrivateBytes / ram) : 0;
             Val(b, Format.BytesB(p.PrivateBytes), Rgb.Stops(_c.GraphStops, memShare));

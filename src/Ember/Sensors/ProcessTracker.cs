@@ -92,17 +92,32 @@ internal sealed class ProcessTracker
             if (!_prev.TryGetValue(key, out var old) || p.HardFaults < old.HardFaults) continue;
             double rate = (p.HardFaults - old.HardFaults) / Seconds;
             total += rate;
-            if (rate >= 1 && p.Pid > 0) list.Add(new FaultProc(p.Pid, p.Name, p.PrivateBytes, rate));
+            if (rate >= 1 && p.Pid > 0) list.Add(new FaultProc(p.Pid, Display(p), p.PrivateBytes, rate));
         }
         return (list.OrderByDescending(f => f.HardFaultsPerSec).ToList(), total);
     }
 
-    private static List<ProcInfo>? Top(List<(ProcSample P, double V)> list, Func<double, string> fmt)
+    private List<ProcInfo>? Top(List<(ProcSample P, double V)> list, Func<double, string> fmt)
     {
         if (list.Count == 0) return null;
         return list.OrderByDescending(x => x.V).Take(TopCount)
-            .Select(x => new ProcInfo(x.P.Pid, x.P.Name, x.V, fmt(x.V))).ToList();
+            .Select(x => new ProcInfo(x.P.Pid, Display(x.P), x.V, fmt(x.V))).ToList();
     }
+
+    private readonly Dictionary<(int Pid, long Create), string> _display = new();
+
+    /// <summary>"python3.13 main.py": name without .exe and the first argument (command line read once per process).</summary>
+    private string Display(ProcSample p)
+    {
+        var key = (p.Pid, p.CreateTime);
+        if (_display.TryGetValue(key, out var d)) return d;
+        if (_display.Count > 512) _display.Clear();
+        return _display[key] = DisplayName(p.Pid, p.Name);
+    }
+
+    /// <summary>Display name of a process (no cache).</summary>
+    public static string DisplayName(int pid, string name)
+        => ProcessNames.Display(name, pid > 4 ? ProcessInfo.CommandLine(pid) : null);
 
     /// <summary>A fresh process list for tree operations.</summary>
     public static List<ProcEntry> Snapshot()

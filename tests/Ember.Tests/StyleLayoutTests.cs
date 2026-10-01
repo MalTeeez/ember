@@ -606,14 +606,14 @@ public class FaultLineTests
         Assert.True(c.Needs.Faults);
         int k = lines.FindIndex(l => l.Text.StartsWith("hard page faults"));
         var first = lines[k + 1];
-        Assert.StartsWith(" └ chrome.exe", first.Text);
+        Assert.StartsWith(" └ chrome ", first.Text); // no .exe
         Assert.EndsWith(" 4.0GB  900/s", first.Text);
         Assert.Equal(10, first.Pid);
         // chrome: a quarter of the RAM and 90 % of the faults → top colour; code.exe lower.
         var top = Rgb.Parse(cfg.Theme.GraphStops[^1], Palette.Red);
         Assert.Contains(first.Runs, r => r.Text.Contains("900/s") && r.Color == Rgb.Stops(ThemeColors.From(cfg.Theme).GraphStops, 0.9));
         Assert.Contains(first.Runs, r => r.Text.Contains("4.0GB") && r.Color == top);
-        Assert.StartsWith(" └ code.exe", lines[k + 2].Text);
+        Assert.StartsWith(" └ code ", lines[k + 2].Text);
     }
 }
 
@@ -627,4 +627,23 @@ public class QueueTextTests
     [InlineData(0, 0, 2.2, "2 requests")]
     public void Words(double r, double w, double total, string expected)
         => Assert.Equal(expected, Format.QueueText(r, w, total));
+}
+
+public class ProcessNameTests
+{
+    [Theory]
+    [InlineData("chrome.exe", null, "chrome")]
+    [InlineData("python3.13.exe", "\"C:\\Py\\python3.13.exe\" -u C:\\work\\main.py --fast", "python3.13 main.py")]
+    [InlineData("node.exe", "node server.js", "node server.js")]
+    [InlineData("chrome.exe", "\"C:\\Chrome\\chrome.exe\" --type=renderer --lang=en", "chrome")]
+    [InlineData("svchost.exe", "C:\\Windows\\system32\\svchost.exe -k netsvcs -p", "svchost netsvcs")]
+    public void Display(string name, string? cmd, string expected)
+        => Assert.Equal(expected, Ember.Core.Util.ProcessNames.Display(name, cmd));
+
+    [Fact]
+    public void FitDots_CutsWithTwoDots()
+    {
+        Assert.Equal("python3.13 ma..", Format.FitDots("python3.13 main.py", 15));
+        Assert.Equal("node  ", Format.FitDots("node", 6));
+    }
 }
