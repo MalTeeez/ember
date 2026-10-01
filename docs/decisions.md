@@ -64,3 +64,15 @@ Rule: when the spec is silent, choose the simplest option.
 | U5 | Process details popup: a normal small window with read-only text. CPU and disk are measured over 250 ms when it opens; GPU is the last sampled value (only when a GPU item is on). It closes when it loses focus. | Simplest. |
 | U6 | "End process" asks for confirmation; "End process tree" does not (as in the spec). The tree ends children first. | Spec. |
 | U7 | Edit-mode drag and DPI: per-monitor DPI v2; fonts are created for the DPI of the target monitor. | Spec: sharp text on all monitors. |
+
+## Settings
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| S1 | The settings window is one scrolling list generated from `SettingsSchema` (Core): sections Items, Thresholds, Intervals, Network, Layout, Other. | One place for labels, parsing and validation; testable on Linux. |
+| S2 | A change applies when the value is valid (each key press for text fields). Invalid text is ignored until it is valid. No OK/Cancel buttons. | Spec: "Changes apply at once". |
+| S3 | Show and hide delays (5 s / 10 s) are also settings. The internet ping host (default 1.1.1.1) is a setting. | Spec: "every threshold, interval … is in Settings". |
+| S4 | Start at logon: the checkbox shows whether the scheduled task "Ember" exists (`schtasks /Query`, no admin). A change runs an elevated PowerShell (one UAC prompt) that registers or removes the task. The setting is not stored in settings.json. | Spec: "Only a change asks for admin rights". The task is the truth. |
+| S5 | Scheduled task: at logon of the current user, highest privileges, no execution time limit, runs on battery, ignore a new instance. | The default task time limit (72 h) would stop the widget. |
+| S6 | Settings JSON with comments and trailing commas is accepted. A broken file gives default settings (and is overwritten on the next change). Values are clamped (sensor interval 0.25–60 s, Claude 15–3600 s, opacity 10–100 %, font 6–32 pt). | Robustness. |
+| S7 | Debug log: `%APPDATA%\Ember\ember.log`, cut at 1 MB (one `.old` file). Each failing source is logged once until it works again. | Spec: debug log, off by default. |
