@@ -1,35 +1,42 @@
 using Ember.Core.Config;
+using Ember.Core.Render;
 using Ember.Core.Status;
 using Ember.Native;
 using Ember.Sensors;
+using Ember.Ui;
 
 namespace Ember.App;
 
-// Feature hooks. Filled in by the later steps (Claude, notes, settings, process actions).
+// Features: Claude, ping, notes, settings window, hotkey, widget buttons and process actions.
 internal sealed partial class AppHost
 {
     private const int NewNoteHotkeyId = 1;
+    private const int CmdRestoreNoteBase = 100;
 
     private ClaudePoller? _claude;
-    private Ui.NotesManager? _notes;
+    private NotesManager? _notes;
     private PingMonitor? _ping;
+    private SettingsWindow? _settingsWindow;
     private string _hotkey = "";
-    private string _noteLayoutKey = "";
+    private string _noteThemeKey = "";
 
-    private static string NoteLayoutKey(EmberSettings s) => $"{s.Layout.Font}|{s.Layout.FontSize}|{s.Layout.Opacity}";
+    private static bool PingOn(EmberSettings s) => s.IsOn("net.quality") || s.PreviewAll;
+    private static bool ClaudeOn(EmberSettings s) => s.IsOn("claude.5h") || s.IsOn("claude.week") || s.IsOn("claude.models");
+    private static string NoteThemeKey(EmberSettings s) => $"{s.Layout.Font}|{s.Layout.FontSize}|{ThemeStore.Serialize(s.Theme)}";
 
     private void StartFeatures()
     {
-        _notes = new Ui.NotesManager(SettingsStore.Clone(_settings).Layout);
+        _notes = new NotesManager(SettingsStore.Clone(_settings));
+        _notes.MinimizedChanged += () => _sampler?.Poke();
         _notes.LoadAll();
-        _noteLayoutKey = NoteLayoutKey(_settings);
+        _noteThemeKey = NoteThemeKey(_settings);
         RegisterNoteHotkey(_settings.Notes.NewNoteHotkey);
 
         _ping = new PingMonitor();
-        _ping.Configure(_settings.Items.NetworkQuality && _settings.Items.Network, _settings.Network.InternetHost);
+        _ping.Configure(PingOn(_settings), _settings.Network.InternetHost);
         _claude = new ClaudePoller(Paths.ClaudeCredentials);
-        _claude.Configure(_settings.Items.Claude, _settings.Intervals.ClaudeSeconds);
-        if (_settings.Items.Claude) _claude.Start();
+        _claude.Configure(ClaudeOn(_settings), _settings.Intervals.ClaudeSeconds);
+        if (ClaudeOn(_settings)) _claude.Start();
     }
 
     private void PauseFeatures()
@@ -43,6 +50,7 @@ internal sealed partial class AppHost
         _claude?.Resume();
         _ping?.Resume();
     }
+
     private void ReattachFeatures() => _notes?.Reattach();
     private void BringFeaturesToFront() => _notes?.BringToFront();
 
@@ -56,6 +64,7 @@ internal sealed partial class AppHost
         if (!W.RegisterHotKey(Handle, NewNoteHotkeyId, mods | W.MOD_NOREPEAT, vk))
             Log.Write($"hotkey {text} is used by another program");
     }
+
     private void StopFeatures()
     {
         _settingsWindow?.Destroy();
@@ -65,23 +74,42 @@ internal sealed partial class AppHost
         _claude = null;
         _ping?.Dispose();
         _ping = null;
+        Tooltip.HideShared();
     }
 
     private void OnSettingsChanged(EmberSettings s)
     {
-        _claude?.Configure(s.Items.Claude, s.Intervals.ClaudeSeconds);
+        _claude?.Configure(ClaudeOn(s), s.Intervals.ClaudeSeconds);
         RegisterNoteHotkey(s.Notes.NewNoteHotkey);
-        _ping?.Configure(s.Items.NetworkQuality && s.Items.Network, s.Network.InternetHost);
-        string key = NoteLayoutKey(s);
-        if (key != _noteLayoutKey)
+        _ping?.Configure(PingOn(s), s.Network.InternetHost);
+        string key = NoteThemeKey(s);
+        if (key != _noteThemeKey)
         {
-            _noteLayoutKey = key;
-            _notes?.ApplyLayout(SettingsStore.Clone(s).Layout);
+            _noteThemeKey = key;
+            _notes?.ApplySettings(SettingsStore.Clone(s));
         }
     }
 
     private void NewNote() => _notes?.New();
-    private Ui.SettingsWindow? _settingsWindow;
+
+    private ComposeContext ComposeContext()
+        => new() { MinimizedNotes = _notes?.Minimized() ?? Array.Empty<(string, string)>() };
+
+    private IEnumerable<(int, string, bool)> MinimizedNoteMenuItems()
+    {
+        var list = _notes?.Minimized() ?? Array.Empty<(string, string)>();
+        for (int i = 0; i < list.Count && i < 50; i++)
+        {
+            string title = string.IsNullOrWhiteSpace(list[i].Title) ? "Note" : list[i].Title;
+            yield return (CmdRestoreNoteBase + i, "Restore note: " + (title.Length > 40 ? title[..40] + "…" : title), false);
+        }
+    }
+
+    private void RestoreNoteByMenu(int index)
+    {
+        var list = _notes?.Minimized();
+        if (list != null && index >= 0 && index < list.Count) _notes!.Restore(list[index].Id);
+    }
 
     /// <summary>Opens the settings window (created now, destroyed on close).</summary>
     private void OpenSettings()
@@ -92,7 +120,7 @@ internal sealed partial class AppHost
             W.SetForegroundWindow(open.Handle);
             return;
         }
-        _settingsWindow = new Ui.SettingsWindow(_settings, s => ApplySettings(s, save: true));
+        _settingsWindow = new SettingsWindow(_settings, s => ApplySettings(s, save: true));
         _settingsWindow.Closed += () =>
         {
             _settingsWindow = null;
@@ -100,12 +128,29 @@ internal sealed partial class AppHost
         };
         _settingsWindow.Create();
     }
+
     private void WireWidget()
     {
         _widget.WidgetMenu += ShowWidgetMenu;
-        _widget.ProcessClicked += (pid, pt) => Ui.ProcessPopup.Show(pid, pt, _sampler?.GpuByPid);
-        _widget.ProcessMenu += (pid, pt) => Ui.ProcessPopup.ShowMenu(Handle, pid, pt);
+        _widget.HitClicked += OnHit;
+        _widget.ProcessMenu += (pid, pt) => ProcessActions.ShowMenu(Handle, pid, pt, () => _sampler?.GpuByPid, _composer.Colors);
     }
+
+    /// <summary>A click on a widget button or line.</summary>
+    private void OnHit(Hit hit, POINT pt)
+    {
+        int.TryParse(hit.Arg, out int pid);
+        switch (hit.Action)
+        {
+            case HitAction.ProcessDetails: ProcessPopup.Show(pid, pt, _sampler?.GpuByPid, _composer.Colors); break;
+            case HitAction.ProcessProperties: ProcessActions.Properties(pid); break;
+            case HitAction.ProcessKill: ProcessActions.EndProcess(Handle, pid); break;
+            case HitAction.NewNote: NewNote(); break;
+            case HitAction.HideWidget: _widget.SetHidden(true); break;
+            case HitAction.RestoreNote: _notes?.Restore(hit.Arg); _sampler?.Poke(); break;
+        }
+    }
+
     /// <summary>Tab key navigation in the settings window.</summary>
     private bool IsDialogMessageForOpenWindows(ref MSG msg)
     {
@@ -113,11 +158,13 @@ internal sealed partial class AppHost
         if (msg.hwnd != sw.Handle && !W.IsChild(sw.Handle, msg.hwnd)) return false;
         return W.IsDialogMessage(sw.Handle, ref msg);
     }
-    /// <summary>Runs on the sampler thread: adds the Claude lines to each snapshot.</summary>
+
+    /// <summary>Runs on the sampler thread: adds the Claude lines and network quality to each snapshot.</summary>
     private Snapshot Decorate(Snapshot s)
     {
-        if (_settings.Items.Claude) s.Claude = _claude?.Lines(DateTimeOffset.UtcNow);
-        if (_settings.Items.NetworkQuality) s.Quality = _ping?.Quality();
+        var cfg = _settings;
+        if (ClaudeOn(cfg)) s.Claude = _claude?.Lines(DateTimeOffset.UtcNow);
+        if (PingOn(cfg)) s.Quality = _ping?.Quality();
         return s;
     }
 }

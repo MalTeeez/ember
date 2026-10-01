@@ -15,33 +15,30 @@ public sealed class Threshold
     public bool Crossed(double value) => Crit >= Warn ? value >= Warn : value < Warn;
 }
 
-/// <summary>On/off for each item. VRAM and network quality are off by default.</summary>
-public sealed class ItemSettings
+/// <summary>
+/// Optional fields inside lines. Lines themselves are switched on/off (and ordered) in
+/// <see cref="EmberSettings.Entries"/>.
+/// </summary>
+public sealed class FieldSettings
 {
-    public bool CpuLoad { get; set; } = true;
-    public bool CpuCores { get; set; } = true;
     public bool CpuTemp { get; set; } = true;
-    public bool CpuThrottle { get; set; } = true;
-    public bool CpuTopProcess { get; set; } = true;
-    public bool Network { get; set; } = true;
-    public bool NetworkQuality { get; set; } = false;
-    public bool GpuLoad { get; set; } = true;
+    public bool CpuClock { get; set; } = true;
+    /// <summary>Temperature and clock on hot-core lines.</summary>
+    public bool CoreDetails { get; set; } = true;
     public bool GpuTemp { get; set; } = true;
-    public bool GpuVram { get; set; } = false;
-    public bool GpuTopProcess { get; set; } = true;
-    public bool MemAvailable { get; set; } = true;
-    public bool MemCommit { get; set; } = true;
-    public bool MemPageFaults { get; set; } = true;
-    public bool MemTopProcess { get; set; } = true;
-    public bool DiskBusy { get; set; } = true;
-    public bool DiskFree { get; set; } = true;
-    public bool DiskTopProcess { get; set; } = true;
-    public bool Claude { get; set; } = true;
+    /// <summary>Claude: third line with the projection ("will last" / "empty … before reset").</summary>
+    public bool ClaudeProjection { get; set; } = true;
+    /// <summary>Network in bytes per second instead of bits.</summary>
+    public bool NetBytes { get; set; } = false;
 }
 
 public sealed class ThresholdSettings
 {
     // CPU
+    /// <summary>A core with at least this load (smoothed) shows as a hot core, also when it is no outlier.</summary>
+    public double HotCoreLoad { get; set; } = 85;
+    /// <summary>A core this many °C above the median core temperature is hot, also at low load.</summary>
+    public double HotCoreTempDelta { get; set; } = 10;
     public double CoreMinSigma { get; set; } = 10;
     public double CoreSigmaFactor { get; set; } = 2;
     public Threshold CpuTemp { get; set; } = new(75, 90);
@@ -100,9 +97,16 @@ public sealed class LayoutSettings
     public int OffsetX { get; set; } = 24;
     public int OffsetY { get; set; } = 24;
     public double FontSize { get; set; } = 10;
-    /// <summary>0..100.</summary>
-    public int Opacity { get; set; } = 90;
+    /// <summary>0..100: opacity of the text and graphs (the background has its own opacity in the theme).</summary>
+    public int Opacity { get; set; } = 100;
     public string Font { get; set; } = "Cascadia Mono";
+    /// <summary>Space of an item that got smaller is kept this long (no jumping lines).</summary>
+    public double HoldSeconds { get; set; } = 60;
+    /// <summary>A top process stays until another one is higher for this long.</summary>
+    public double ProcessStickSeconds { get; set; } = 15;
+    /// <summary>Animate size changes.</summary>
+    public bool Animate { get; set; } = true;
+    public int AnimationMs { get; set; } = 160;
 }
 
 public sealed class NotesSettings
@@ -112,7 +116,11 @@ public sealed class NotesSettings
 
 public sealed class EmberSettings
 {
-    public ItemSettings Items { get; set; } = new();
+    public FieldSettings Fields { get; set; } = new();
+    public List<LayoutEntry> Entries { get; set; } = LayoutPreset.Default().Entries;
+    public Ember.Core.Render.Theme Theme { get; set; } = new();
+    /// <summary>Debug: show every enabled item, ignore thresholds and delays, fill missing data with sample values.</summary>
+    public bool PreviewAll { get; set; } = false;
     public ThresholdSettings Thresholds { get; set; } = new();
     public IntervalSettings Intervals { get; set; } = new();
     public NetworkSettings Network { get; set; } = new();
@@ -120,10 +128,15 @@ public sealed class EmberSettings
     public NotesSettings Notes { get; set; } = new();
     public bool DebugLog { get; set; } = false;
 
+    /// <summary>True if the layout has the item and it is on.</summary>
+    public bool IsOn(string id) => Entries.Any(e => e.Kind == "item" && e.Id == id && e.Enabled);
+
     /// <summary>Clamp values that would break the app.</summary>
     public void Normalize()
     {
-        Items ??= new(); Thresholds ??= new(); Intervals ??= new(); Network ??= new(); Layout ??= new(); Notes ??= new();
+        Fields ??= new(); Theme ??= new(); Theme.Background ??= new(); Theme.GraphStops ??= new();
+        Entries = LayoutPreset.Normalize(Entries);
+        Thresholds ??= new(); Intervals ??= new(); Network ??= new(); Layout ??= new(); Notes ??= new();
         Network.ExcludedAdapters ??= new();
         Intervals.SensorSeconds = Math.Clamp(Intervals.SensorSeconds, 0.25, 60);
         Intervals.ClaudeSeconds = Math.Clamp(Intervals.ClaudeSeconds, 15, 3600);
@@ -131,6 +144,13 @@ public sealed class EmberSettings
         Intervals.HideDelaySeconds = Math.Clamp(Intervals.HideDelaySeconds, 0, 600);
         Layout.FontSize = Math.Clamp(Layout.FontSize, 6, 32);
         Layout.Opacity = Math.Clamp(Layout.Opacity, 10, 100);
+        Layout.HoldSeconds = Math.Clamp(Layout.HoldSeconds, 0, 3600);
+        Layout.ProcessStickSeconds = Math.Clamp(Layout.ProcessStickSeconds, 0, 600);
+        Layout.AnimationMs = Math.Clamp(Layout.AnimationMs, 0, 1000);
+        Theme.Background.Opacity = Math.Clamp(Theme.Background.Opacity, 0, 100);
+        Theme.Background.BorderOpacity = Math.Clamp(Theme.Background.BorderOpacity, 0, 100);
+        Theme.Background.CornerRadius = Math.Clamp(Theme.Background.CornerRadius, 0, 40);
+        Theme.Background.Padding = Math.Clamp(Theme.Background.Padding, 0, 40);
         Layout.Monitor = Math.Max(0, Layout.Monitor);
         if (string.IsNullOrWhiteSpace(Layout.Font)) Layout.Font = "Cascadia Mono";
         Notes.NewNoteHotkey ??= "";

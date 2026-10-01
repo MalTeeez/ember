@@ -7,13 +7,58 @@ public static class Format
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    /// <summary>Compact duration: "42m", "3h10", "4d02". Negative values give "0m".</summary>
+    /// <summary>Compact duration: "52m", "3h05m", "1d22h", "4d2h". Negative values give "0m".</summary>
     public static string Duration(TimeSpan t)
     {
         if (t < TimeSpan.Zero) t = TimeSpan.Zero;
         if (t.TotalHours < 1) return ((int)Math.Floor(t.TotalMinutes)).ToString(Inv) + "m";
-        if (t.TotalDays < 1) return ((int)Math.Floor(t.TotalHours)).ToString(Inv) + "h" + t.Minutes.ToString("00", Inv);
-        return ((int)Math.Floor(t.TotalDays)).ToString(Inv) + "d" + t.Hours.ToString("00", Inv);
+        if (t.TotalDays < 1) return ((int)Math.Floor(t.TotalHours)).ToString(Inv) + "h" + t.Minutes.ToString("00", Inv) + "m";
+        return ((int)Math.Floor(t.TotalDays)).ToString(Inv) + "d" + t.Hours.ToString(Inv) + "h";
+    }
+
+    // ───── 4-character fields: 3 for the value, 1 for the unit letter ─────
+
+    /// <summary>" 23%", "100%".</summary>
+    public static string Pct4(double v) => (Math.Round(Math.Clamp(double.IsNaN(v) ? 0 : v, 0, 999)).ToString("0", Inv) + "%").PadLeft(4);
+
+    /// <summary>" 71°".</summary>
+    public static string Temp4(double c) => (Math.Round(Math.Clamp(c, -99, 999)).ToString("0", Inv) + "\u00B0").PadLeft(4);
+
+    /// <summary>Value with a unit letter in 4 characters: "2.1M", " 61M", "612M", "1.2G". Base 1000 or 1024.</summary>
+    public static string Scaled4(double v, double baseValue, string letters)
+    {
+        if (double.IsNaN(v) || v < 0) v = 0;
+        int i = 0;
+        // Move to the next unit when the rounded value would need 4 digits.
+        while (i < letters.Length - 1 && Math.Round(v) >= 999.5) { v /= baseValue; i++; }
+        string num = v < 9.95 ? v.ToString("0.0", Inv) : Math.Round(v).ToString("0", Inv);
+        if (num.Length > 3) num = Math.Round(v) >= 999.5 ? "999" : Math.Round(v).ToString("0", Inv); // above the largest unit: capped
+        return (num + letters[i]).PadLeft(4);
+    }
+
+    /// <summary>Bits or bytes per second, base 1000: " 61M". Input in bits per second.</summary>
+    public static string Rate4(double bitsPerSecond, bool bytes = false)
+        => Scaled4((bytes ? bitsPerSecond / 8 : bitsPerSecond) / 1000, 1000, "kMGTP");
+
+    /// <summary>Bytes, base 1024: "7.8G", " 12G", "512M".</summary>
+    public static string Bytes4(double bytes) => Scaled4(bytes / 1024, 1024, "KMGTP");
+
+    /// <summary>Clock from MHz: "4.8G", "800M".</summary>
+    public static string Clock4(double mhz) => Scaled4(mhz, 1000, "MG");
+
+    /// <summary>Counts: " 980", "1.5k", " 12k".</summary>
+    public static string Count4(double n)
+    {
+        if (double.IsNaN(n) || n < 0) n = 0;
+        return Math.Round(n) < 999.5 ? Math.Round(n).ToString("0", Inv).PadLeft(4) : Scaled4(n / 1000, 1000, "kMG");
+    }
+
+    /// <summary>Plain number in 4 characters: " 2.4", " 140".</summary>
+    public static string Num4(double v)
+    {
+        if (double.IsNaN(v)) v = 0;
+        string s = Math.Abs(v) < 9.95 ? v.ToString("0.0", Inv) : Math.Round(v).ToString("0", Inv);
+        return s.Length > 4 ? "999+" : s.PadLeft(4);
     }
 
     /// <summary>A bit-rate unit: name and divisor (bits per second).</summary>

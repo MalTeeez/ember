@@ -140,6 +140,21 @@ internal struct CHARFORMAT2
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
+internal unsafe struct PARAFORMAT2
+{
+    public uint cbSize, dwMask;
+    public ushort wNumbering, wEffects;
+    public int dxStartIndent, dxRightIndent, dxOffset;
+    public ushort wAlignment;
+    public short cTabCount;
+    public fixed int rgxTabs[32];
+    public int dySpaceBefore, dySpaceAfter, dyLineSpacing;
+    public short sStyle;
+    public byte bLineSpacingRule, bOutlineLevel;
+    public ushort wShadingWeight, wShadingStyle, wNumberingStart, wNumberingStyle, wNumberingTab, wBorderSpace, wBorderWidth, wBorders;
+}
+
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
 internal struct GETTEXTEX { public uint cb, flags, codepage; public IntPtr lpDefaultChar, lpUsedDefChar; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -150,6 +165,70 @@ internal struct POWERBROADCAST_SETTING { public Guid PowerSetting; public uint D
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct SCROLLINFO { public uint cbSize, fMask; public int nMin, nMax; public uint nPage; public int nPos, nTrackPos; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct CHOOSECOLOR
+{
+    public uint lStructSize;
+    public IntPtr hwndOwner, hInstance;
+    public uint rgbResult;
+    public IntPtr lpCustColors;
+    public uint Flags;
+    public IntPtr lCustData, lpfnHook, lpTemplateName;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct OPENFILENAME
+{
+    public uint lStructSize;
+    public IntPtr hwndOwner, hInstance, lpstrFilter, lpstrCustomFilter;
+    public uint nMaxCustFilter, nFilterIndex;
+    public IntPtr lpstrFile;
+    public uint nMaxFile;
+    public IntPtr lpstrFileTitle;
+    public uint nMaxFileTitle;
+    public IntPtr lpstrInitialDir, lpstrTitle;
+    public uint Flags;
+    public ushort nFileOffset, nFileExtension;
+    public IntPtr lpstrDefExt, lCustData, lpfnHook, lpTemplateName, pvReserved;
+    public uint dwReserved, FlagsEx;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct INITCOMMONCONTROLSEX { public uint dwSize, dwICC; }
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+internal struct SHELLEXECUTEINFO
+{
+    public uint cbSize, fMask;
+    public IntPtr hwnd;
+    public string? lpVerb, lpFile, lpParameters, lpDirectory;
+    public int nShow;
+    public IntPtr hInstApp, lpIDList;
+    public string? lpClass;
+    public IntPtr hkeyClass;
+    public uint dwHotKey;
+    public IntPtr hIconOrMonitor, hProcess;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ACCENT_POLICY { public int AccentState, AccentFlags; public uint GradientColor; public int AnimationId; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct WINDOWCOMPOSITIONATTRIBDATA { public int Attrib; public IntPtr pvData; public int cbData; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct TRACKMOUSEEVENT { public uint cbSize, dwFlags; public IntPtr hwndTrack; public uint dwHoverTime; }
+
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct PAINTSTRUCT
+{
+    public IntPtr hdc;
+    public int fErase;
+    public RECT rcPaint;
+    public int fRestore, fIncUpdate;
+    public fixed byte rgbReserved[32];
+}
 
 internal static class W
 {
@@ -232,6 +311,11 @@ internal static class W
         EM_GETTEXTEX = WM_USER + 94, EM_GETTEXTLENGTHEX = WM_USER + 95, EM_SETTEXTMODE = WM_USER + 89,
         EM_SETMARGINS = 0x00D3, EM_STOPGROUPTYPING = WM_USER + 88, EM_SETUNDOLIMIT = WM_USER + 82,
         EM_HIDESELECTION = WM_USER + 63, EM_SETLIMITTEXT = 0x00C5, EM_EXLIMITTEXT = WM_USER + 53;
+    public const uint EM_SETPARAFORMAT = WM_USER + 71, PFM_STARTINDENT = 0x1, PFM_OFFSET = 0x4, PFM_SPACEBEFORE = 0x40, PFM_SPACEAFTER = 0x80;
+    public const uint CFE_UNDERLINE = 0x4;
+    [DllImport("user32.dll")] public static extern short GetKeyState(int vk);
+    public const int VK_CONTROL = 0x11;
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr hwnd, uint msg, IntPtr wParam, ref PARAFORMAT2 lParam);
     public const uint ENM_CHANGE = 0x1, ENM_MOUSEEVENTS = 0x20000, ENM_KEYEVENTS = 0x10000;
     public const int EN_MSGFILTER = 0x0700;
     public const uint SCF_SELECTION = 0x1, SCF_ALL = 0x4, SCF_DEFAULT = 0x0;
@@ -329,6 +413,16 @@ internal static class W
     [DllImport("user32.dll")] public static extern IntPtr SetCapture(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern bool ChangeWindowMessageFilterEx(IntPtr hwnd, uint msg, uint action, IntPtr info);
     public const uint MSGFLT_ALLOW = 1;
+    [DllImport("user32.dll")] public static extern int SetWindowRgn(IntPtr hwnd, IntPtr rgn, bool redraw);
+    [DllImport("user32.dll")] public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WINDOWCOMPOSITIONATTRIBDATA data);
+    [DllImport("user32.dll")] public static extern bool TrackMouseEvent(ref TRACKMOUSEEVENT e);
+    [DllImport("user32.dll")] public static extern bool PtInRect(ref RECT r, POINT p);
+    [DllImport("user32.dll")] public static extern IntPtr BeginPaint(IntPtr hwnd, out PAINTSTRUCT ps);
+    [DllImport("user32.dll")] public static extern bool EndPaint(IntPtr hwnd, ref PAINTSTRUCT ps);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hwnd);
+    public const uint WM_MOUSELEAVE = 0x02A3, TME_LEAVE = 0x2;
+    public const int WCA_ACCENT_POLICY = 19;
+    public const int ACCENT_DISABLED = 0, ACCENT_ENABLE_BLURBEHIND = 3, ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
     [DllImport("user32.dll")] public static extern bool ReleaseCapture();
 
     // gdi32
@@ -344,6 +438,7 @@ internal static class W
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr CreateFont(int h, int w, int esc, int orient, int weight,
         uint italic, uint underline, uint strike, uint charset, uint outPrecision, uint clipPrecision, uint quality, uint pitch, string face);
 
+    [DllImport("gdi32.dll")] public static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern uint GetGlyphIndices(IntPtr hdc, string text, int count, ushort[] indices, uint flags);
     public const uint GGI_MARK_NONEXISTING_GLYPHS = 1;
 
@@ -378,6 +473,22 @@ internal static class W
     // shell32
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern bool Shell_NotifyIcon(uint msg, ref NOTIFYICONDATA data);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr ShellExecute(IntPtr hwnd, string? op, string file, string? args, string? dir, int show);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)] public static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO info);
+    public const uint SEE_MASK_INVOKEIDLIST = 0x0000000C;
+
+    [DllImport("comdlg32.dll", EntryPoint = "ChooseColorW")] public static extern bool ChooseColor(ref CHOOSECOLOR cc);
+    [DllImport("comdlg32.dll", EntryPoint = "GetOpenFileNameW")] public static extern bool GetOpenFileName(ref OPENFILENAME ofn);
+    [DllImport("comdlg32.dll", EntryPoint = "GetSaveFileNameW")] public static extern bool GetSaveFileName(ref OPENFILENAME ofn);
+    [DllImport("comctl32.dll")] public static extern bool InitCommonControlsEx(ref INITCOMMONCONTROLSEX icc);
+    public const uint CC_RGBINIT = 0x1, CC_FULLOPEN = 0x2;
+    public const uint OFN_OVERWRITEPROMPT = 0x2, OFN_PATHMUSTEXIST = 0x800, OFN_FILEMUSTEXIST = 0x1000, OFN_NOCHANGEDIR = 0x8;
+    public const uint ICC_BAR_CLASSES = 0x4, ICC_STANDARD_CLASSES = 0x4000;
+    public const uint TBM_GETPOS = WM_USER, TBM_SETPOS = WM_USER + 5, TBM_SETRANGE = WM_USER + 6, TBS_HORZ = 0, TBS_NOTICKS = 0x10;
+    public const uint WM_HSCROLL = 0x0114;
+    public const uint LB_ADDSTRING = 0x0180, LB_RESETCONTENT = 0x0184, LB_SETCURSEL = 0x0186, LB_GETCURSEL = 0x0188, LB_GETTOPINDEX = 0x018E, LB_SETTOPINDEX = 0x0197;
+    public const uint LBS_NOTIFY = 0x1, LBS_NOINTEGRALHEIGHT = 0x100;
+    public const int LBN_SELCHANGE = 1, LBN_DBLCLK = 2;
 
     // shcore
     [DllImport("shcore.dll")] public static extern int GetDpiForMonitor(IntPtr mon, int type, out uint dpiX, out uint dpiY);

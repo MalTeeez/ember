@@ -117,8 +117,10 @@ public class FormatTests
     [Theory]
     [InlineData(0, "0m")]
     [InlineData(42, "42m")]
-    [InlineData(190, "3h10")]
-    [InlineData(60 * 24 * 4 + 120, "4d02")]
+    [InlineData(190, "3h10m")]
+    [InlineData(185, "3h05m")]
+    [InlineData(60 * 46, "1d22h")]
+    [InlineData(60 * 24 * 4 + 120, "4d2h")]
     [InlineData(-5, "0m")]
     public void Duration(double minutes, string expected)
         => Assert.Equal(expected, Format.Duration(TimeSpan.FromMinutes(minutes)));
@@ -188,13 +190,21 @@ public class LineTests
         Assert.Equal(Layout.Width, l.Length);
     }
 
-    [Fact]
-    public void Header_IsLetterSpacedWithRule()
+    [Theory]
+    [InlineData("rule", "\u2500\u2500 gpu \u2500")]
+    [InlineData("spaced", "\u2500 g p u \u2500")]
+    [InlineData("plain", "gpu ")]
+    [InlineData("bracket", "\u2500\u2500\u2524 gpu \u251C\u2500")]
+    [InlineData("dots", "gpu \u00B7 ")]
+    [InlineData("fade", "gpu \u2501")]
+    public void Header_Styles(string style, string start)
     {
-        var h = Layout.Header("GPU");
-        Assert.StartsWith("─ G P U ─", h.Text);
+        var t = new Theme { HeaderStyle = style };
+        var h = Layout.Header("GPU", ThemeColors.From(t));
+        Assert.StartsWith(start, h.Text);
         Assert.Equal(Layout.Width, h.Length);
-        Assert.All(h.Runs, r => Assert.Equal(Palette.Dim, r.Color));
+        t.HeaderUpper = true;
+        Assert.Contains("G", Layout.Header("gpu", ThemeColors.From(t)).Text);
     }
 
     [Fact]

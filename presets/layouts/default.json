@@ -1,0 +1,193 @@
+{
+  "Name": "default",
+  "Entries": [
+    {
+      "Kind": "item",
+      "Id": "toolbar",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "cpu.load",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "cpu.cores",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "cpu.throttle",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "cpu.top",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "net.down",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "net.up",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "net.adapters",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "net.quality",
+      "Enabled": false,
+      "Collapse": true
+    },
+    {
+      "Kind": "spacer",
+      "Id": "spacer",
+      "Enabled": true,
+      "Preset": "blank",
+      "Collapse": true
+    },
+    {
+      "Kind": "header",
+      "Id": "header",
+      "Enabled": true,
+      "Text": "gpu",
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "gpu.load",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "gpu.vram",
+      "Enabled": false,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "gpu.top",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "spacer",
+      "Id": "spacer",
+      "Enabled": true,
+      "Preset": "blank",
+      "Collapse": true
+    },
+    {
+      "Kind": "header",
+      "Id": "header",
+      "Enabled": true,
+      "Text": "memory",
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "mem.avail",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "mem.commit",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "mem.pagein",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "mem.top",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "spacer",
+      "Id": "spacer",
+      "Enabled": true,
+      "Preset": "blank",
+      "Collapse": true
+    },
+    {
+      "Kind": "header",
+      "Id": "header",
+      "Enabled": true,
+      "Text": "disk",
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "disk.busy",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "disk.free",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "disk.top",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "spacer",
+      "Id": "spacer",
+      "Enabled": true,
+      "Preset": "blank",
+      "Collapse": true
+    },
+    {
+      "Kind": "header",
+      "Id": "header",
+      "Enabled": true,
+      "Text": "claude",
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "claude.5h",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "claude.week",
+      "Enabled": true,
+      "Collapse": true
+    },
+    {
+      "Kind": "item",
+      "Id": "claude.models",
+      "Enabled": true,
+      "Collapse": true
+    }
+  ]
+}

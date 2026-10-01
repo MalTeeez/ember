@@ -5,19 +5,22 @@ using Ember.Native;
 namespace Ember.Ui;
 
 /// <summary>
-/// Draws widget lines with GDI+ on a fixed character grid. Characters that the main font
-/// does not have (for example braille in Consolas) are drawn with a fallback font in their cell.
+/// Draws widget lines with GDI+ on a fixed character grid. Bold runs use a bold font; icon runs use
+/// the icon font (Segoe Fluent Icons, else Segoe MDL2 Assets) centred in their 2 cells. Characters
+/// that the main font does not have (for example braille in Consolas) are drawn with a fallback font,
+/// centred in their cell (so they sit on the same middle line as the text).
 /// </summary>
 internal sealed class TextRenderer : IDisposable
 {
     private const string FallbackFace = "Segoe UI Symbol";
-    private const string SpecialChars = "\u28FF\u2840\u2588\u2589\u258A\u258B\u258C\u258D\u258E\u258F\u2502\u2514\u2500\u2193\u2191\u21BB\u00B0\u2026\u2014";
+    private const string SpecialChars = "⣿⡀█▉▊▋▌▍▎▏│└─━╌═┤├↓↑°…—■•░";
 
-    private IntPtr _family, _font, _fbFamily, _fbFont, _format, _brush;
+    private IntPtr _family, _font, _bold, _fbFamily, _fbFont, _iconFamily, _iconFont, _format, _center, _brush;
     private readonly HashSet<char> _missing = new();
     private bool _missingBraille;
     public float CellWidth { get; private set; } = 8;
     public float LineHeight { get; private set; } = 16;
+    public float EmPixels { get; private set; } = 13;
     private string _key = "";
 
     public static IntPtr GdipToken;
@@ -37,6 +40,7 @@ internal sealed class TextRenderer : IDisposable
         _key = key;
 
         float px = (float)(sizePt * dpi / 72.0);
+        EmPixels = px;
         string used = face;
         if (Gdip.GdipCreateFontFamilyFromName(face, IntPtr.Zero, out _family) != 0)
         {
@@ -48,17 +52,27 @@ internal sealed class TextRenderer : IDisposable
             }
         }
         Gdip.GdipCreateFont(_family, px, Gdip.FontStyleRegular, Gdip.UnitPixel, out _font);
+        if (Gdip.GdipCreateFont(_family, px, Gdip.FontStyleBold, Gdip.UnitPixel, out _bold) != 0) _bold = IntPtr.Zero;
         if (Gdip.GdipCreateFontFamilyFromName(FallbackFace, IntPtr.Zero, out _fbFamily) == 0)
             Gdip.GdipCreateFont(_fbFamily, px, Gdip.FontStyleRegular, Gdip.UnitPixel, out _fbFont);
+        if (Gdip.GdipCreateFontFamilyFromName("Segoe Fluent Icons", IntPtr.Zero, out _iconFamily) != 0 &&
+            Gdip.GdipCreateFontFamilyFromName("Segoe MDL2 Assets", IntPtr.Zero, out _iconFamily) != 0)
+            _iconFamily = IntPtr.Zero;
+        if (_iconFamily != IntPtr.Zero)
+            Gdip.GdipCreateFont(_iconFamily, px * 0.9f, Gdip.FontStyleRegular, Gdip.UnitPixel, out _iconFont);
 
         Gdip.GdipStringFormatGetGenericTypographic(out var generic);
         Gdip.GdipCloneStringFormat(generic, out _format);
         Gdip.GdipSetStringFormatFlags(_format, Gdip.StringFormatFlagsMeasureTrailingSpaces | Gdip.StringFormatFlagsNoWrap | Gdip.StringFormatFlagsNoClip);
+        Gdip.GdipCloneStringFormat(generic, out _center);
+        Gdip.GdipSetStringFormatFlags(_center, Gdip.StringFormatFlagsNoWrap | Gdip.StringFormatFlagsNoClip);
+        Gdip.GdipSetStringFormatAlign(_center, Gdip.StringAlignmentCenter);
+        Gdip.GdipSetStringFormatLineAlign(_center, Gdip.StringAlignmentCenter);
         if (_brush == IntPtr.Zero) Gdip.GdipCreateSolidFill(0xFFFFFFFF, out _brush);
 
         FindMissingGlyphs(used, (int)Math.Round(px));
         Measure();
-        Log.Write($"font {used} {sizePt}pt dpi {dpi}: cell {CellWidth:0.00}x{LineHeight:0.00}, missing '{new string(_missing.ToArray())}'");
+        Log.Write($"font {used} {sizePt}pt dpi {dpi}: cell {CellWidth:0.00}x{LineHeight:0.00}, icons {(_iconFont != IntPtr.Zero)}, missing '{new string(_missing.ToArray())}'");
     }
 
     private void FindMissingGlyphs(string face, int px)
@@ -109,18 +123,41 @@ internal sealed class TextRenderer : IDisposable
     private bool UseFallback(char c)
         => _fbFont != IntPtr.Zero && (_missing.Contains(c) || (_missingBraille && c >= '⠀' && c <= '⣿'));
 
-    /// <summary>Draws the lines. Characters below U+2000 are drawn as runs; others one by one in their cell.</summary>
-    public void Draw(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0)
+    /// <summary>
+    /// Draws the lines. Text alpha = <paramref name="alpha"/> (text opacity). With <paramref name="shadow"/>,
+    /// each glyph first gets a dark copy 1 px down-right. Lines below <paramref name="maxY"/> are not drawn.
+    /// </summary>
+    public void Draw(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, byte alpha, bool shadow, float maxY = float.MaxValue)
     {
         Gdip.GdipSetTextRenderingHint(g, Gdip.TextRenderingHintAntiAliasGridFit);
+        if (shadow)
+        {
+            float off = Math.Max(1, EmPixels / 13f);
+            DrawPass(g, lines, x0 + off, y0 + off, _ => (uint)(Math.Min(alpha, (byte)170) << 24), maxY);
+        }
+        DrawPass(g, lines, x0, y0, c => c.ToArgb(alpha), maxY);
+    }
+
+    private void DrawPass(IntPtr g, IReadOnlyList<Line> lines, float x0, float y0, Func<Rgb, uint> color, float maxY)
+    {
         float y = y0;
         var seg = new System.Text.StringBuilder();
         foreach (var line in lines)
         {
+            if (y >= maxY) break;
+            if (line.IsPadding) { y += LineHeight; continue; }
             int col = 0;
             foreach (var run in line.Runs)
             {
-                Gdip.GdipSetSolidFillColor(_brush, run.Color.ToArgb());
+                Gdip.GdipSetSolidFillColor(_brush, color(run.Color));
+                if ((run.Style & RunStyle.Icon) != 0)
+                {
+                    if (run.Text.Length > 0 && _iconFont != IntPtr.Zero)
+                        DrawCentered(g, run.Text[0].ToString(), _iconFont, x0 + col * CellWidth, y, CellWidth * 2);
+                    col += run.Text.Length;
+                    continue;
+                }
+                var font = (run.Style & RunStyle.Bold) != 0 && _bold != IntPtr.Zero ? _bold : _font;
                 int segStart = col;
                 seg.Clear();
                 foreach (char c in run.Text)
@@ -132,25 +169,28 @@ internal sealed class TextRenderer : IDisposable
                     }
                     else
                     {
-                        Flush(g, seg, x0, segStart, y);
+                        Flush(g, seg, font, x0, segStart, y);
                         if (c != '⠀') // blank braille: nothing to draw
-                            DrawText(g, c.ToString(), UseFallback(c) ? _fbFont : _font, x0 + col * CellWidth, y);
+                        {
+                            if (UseFallback(c)) DrawCentered(g, c.ToString(), _fbFont, x0 + col * CellWidth, y, CellWidth);
+                            else DrawText(g, c.ToString(), font, x0 + col * CellWidth, y);
+                        }
                     }
                     col++;
                 }
-                Flush(g, seg, x0, segStart, y);
+                Flush(g, seg, font, x0, segStart, y);
             }
             y += LineHeight;
         }
     }
 
-    private void Flush(IntPtr g, System.Text.StringBuilder seg, float x0, int col, float y)
+    private void Flush(IntPtr g, System.Text.StringBuilder seg, IntPtr font, float x0, int col, float y)
     {
         if (seg.Length == 0) return;
         string s = seg.ToString();
         seg.Clear();
         if (s.Trim().Length == 0) return;
-        DrawText(g, s, _font, x0 + col * CellWidth, y);
+        DrawText(g, s, font, x0 + col * CellWidth, y);
     }
 
     private void DrawText(IntPtr g, string s, IntPtr font, float x, float y)
@@ -159,13 +199,24 @@ internal sealed class TextRenderer : IDisposable
         Gdip.GdipDrawString(g, s, s.Length, font, ref rect, _format, _brush);
     }
 
+    /// <summary>Centred in a cell box of the line height (icons, fallback glyphs).</summary>
+    private void DrawCentered(IntPtr g, string s, IntPtr font, float x, float y, float width)
+    {
+        var rect = new RectF(x, y, width, LineHeight);
+        Gdip.GdipDrawString(g, s, s.Length, font, ref rect, _center, _brush);
+    }
+
     private void FreeFonts()
     {
-        if (_font != IntPtr.Zero) { Gdip.GdipDeleteFont(_font); _font = IntPtr.Zero; }
-        if (_fbFont != IntPtr.Zero) { Gdip.GdipDeleteFont(_fbFont); _fbFont = IntPtr.Zero; }
-        if (_family != IntPtr.Zero) { Gdip.GdipDeleteFontFamily(_family); _family = IntPtr.Zero; }
-        if (_fbFamily != IntPtr.Zero) { Gdip.GdipDeleteFontFamily(_fbFamily); _fbFamily = IntPtr.Zero; }
+        foreach (var f in new[] { _font, _bold, _fbFont, _iconFont })
+            if (f != IntPtr.Zero) Gdip.GdipDeleteFont(f);
+        _font = _bold = _fbFont = _iconFont = IntPtr.Zero;
+        if (_family != IntPtr.Zero) Gdip.GdipDeleteFontFamily(_family);
+        if (_fbFamily != IntPtr.Zero) Gdip.GdipDeleteFontFamily(_fbFamily);
+        if (_iconFamily != IntPtr.Zero) Gdip.GdipDeleteFontFamily(_iconFamily);
+        _family = _fbFamily = _iconFamily = IntPtr.Zero;
         if (_format != IntPtr.Zero) { Gdip.GdipDeleteStringFormat(_format); _format = IntPtr.Zero; }
+        if (_center != IntPtr.Zero) { Gdip.GdipDeleteStringFormat(_center); _center = IntPtr.Zero; }
         _key = "";
     }
 

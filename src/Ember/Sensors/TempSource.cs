@@ -10,8 +10,11 @@ namespace Ember.Sensors;
 /// Without the driver (or in an EmberOffline build) all temperatures are null and their items stay hidden.
 /// The LHM Computer is opened on a background thread on first use.
 /// </summary>
-internal sealed class TempSource : IDisposable
+internal sealed partial class TempSource : IDisposable
 {
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(CPU |P-|E-)?Core #\d+$")]
+    private static partial System.Text.RegularExpressions.Regex CoreName();
+
     public readonly record struct GpuTemp(string Name, double Celsius);
 
 #if LHM
@@ -21,6 +24,8 @@ internal sealed class TempSource : IDisposable
 #endif
 
     public double? CpuPackage { get; private set; }
+    /// <summary>Per physical core temperatures in LHM order: ("CPU Core #1", 55), or ("P-Core #1", …), ("E-Core #1", …).</summary>
+    public List<(string Name, double Celsius)> CoreTemps { get; } = new();
     public List<GpuTemp> Gpus { get; } = new();
 
     /// <summary>Reads the temperatures. Only the enabled hardware is updated.</summary>
@@ -28,6 +33,7 @@ internal sealed class TempSource : IDisposable
     {
         CpuPackage = null;
         Gpus.Clear();
+        CoreTemps.Clear();
 #if LHM
         if (!cpu && !gpu) return;
         if (_failed) return;
@@ -56,6 +62,9 @@ internal sealed class TempSource : IDisposable
                 {
                     var t = PackageTemp(hw);
                     if (t != null) CpuPackage = CpuPackage == null ? t : Math.Max(CpuPackage.Value, t.Value);
+                    foreach (var sensor in hw.Sensors)
+                        if (sensor.SensorType == SensorType.Temperature && sensor.Value is { } v && CoreName().IsMatch(sensor.Name))
+                            CoreTemps.Add((sensor.Name, v));
                 }
                 else
                 {

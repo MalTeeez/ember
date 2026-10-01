@@ -123,9 +123,11 @@ public class SettingsTests
     public void Defaults_MatchSpec()
     {
         var s = new EmberSettings();
-        Assert.False(s.Items.GpuVram);
-        Assert.False(s.Items.NetworkQuality);
-        Assert.True(s.Items.CpuTemp);
+        Assert.False(s.IsOn("gpu.vram"));
+        Assert.False(s.IsOn("net.quality"));
+        Assert.True(s.Fields.CpuTemp);
+        Assert.True(s.IsOn("cpu.load"));
+        Assert.Equal("ember", s.Theme.Name);
         Assert.Equal(1, s.Intervals.SensorSeconds);
         Assert.Equal(60, s.Intervals.ClaudeSeconds);
         Assert.Equal(75, s.Thresholds.CpuTemp.Warn);
@@ -140,11 +142,13 @@ public class SettingsTests
     public void JsonRoundTrip()
     {
         var s = new EmberSettings();
-        s.Items.GpuVram = true;
+        s.Entries.First(e => e.Id == "gpu.vram").Enabled = true;
+        s.Theme.BarStyle = "pips";
         s.Thresholds.GpuTemp.Warn = 66;
         s.Layout.Corner = Corner.BottomLeft;
         var back = SettingsStore.Parse(SettingsStore.Serialize(s));
-        Assert.True(back.Items.GpuVram);
+        Assert.True(back.IsOn("gpu.vram"));
+        Assert.Equal("pips", back.Theme.BarStyle);
         Assert.Equal(66, back.Thresholds.GpuTemp.Warn);
         Assert.Equal(Corner.BottomLeft, back.Layout.Corner);
         Assert.Contains("\"BottomLeft\"", SettingsStore.Serialize(s));
@@ -153,7 +157,7 @@ public class SettingsTests
     [Fact]
     public void BrokenJson_GivesDefaults_AndNormalizes()
     {
-        Assert.True(SettingsStore.Parse("{ broken").Items.CpuLoad);
+        Assert.True(SettingsStore.Parse("{ broken").IsOn("cpu.load"));
         var s = SettingsStore.Parse("""{"Intervals":{"SensorSeconds":0},"Layout":{"Opacity":500}}""");
         Assert.Equal(0.25, s.Intervals.SensorSeconds);
         Assert.Equal(100, s.Layout.Opacity);
@@ -170,7 +174,7 @@ public class SettingsTests
             s.Notes.NewNoteHotkey = "Ctrl+Shift+M";
             SettingsStore.Save(path, s);
             Assert.Equal("Ctrl+Shift+M", SettingsStore.Load(path).Notes.NewNoteHotkey);
-            Assert.True(SettingsStore.Load(Path.Combine(dir, "missing.json")).Items.Claude);
+            Assert.True(SettingsStore.Load(Path.Combine(dir, "missing.json")).IsOn("claude.5h"));
         }
         finally { Directory.Delete(dir, true); }
     }
@@ -179,7 +183,7 @@ public class SettingsTests
     public void Schema_AllFieldsRoundTrip()
     {
         var s = new EmberSettings();
-        foreach (var f in SettingsSchema.Fields.Where(f => !f.IsSpecial))
+        foreach (var f in SettingsSchema.Fields.Where(f => !f.IsSpecial && !f.ReloadsOthers && f.Kind is not (FieldKind.Action or FieldKind.LayoutEditor)))
         {
             string v = f.Get(s);
             Assert.True(f.Set(s, v), f.Label);
@@ -206,10 +210,39 @@ public class SettingsTests
     }
 
     [Fact]
-    public void Schema_HasEveryItemToggle()
+    public void Schema_PagesAndKinds()
     {
-        int bools = typeof(ItemSettings).GetProperties().Length;
-        Assert.Equal(bools, SettingsSchema.Fields.Count(f => f.Section == "Items"));
+        Assert.All(SettingsSchema.Fields, f => Assert.Contains(f.Page, SettingsSchema.Pages));
+        Assert.Single(SettingsSchema.Fields, f => f.Kind == FieldKind.LayoutEditor);
+        Assert.Contains(SettingsSchema.Fields, f => f.Kind == FieldKind.Color);
+        Assert.Contains(SettingsSchema.Fields, f => f.Kind == FieldKind.Slider);
+        Assert.Contains(SettingsSchema.Fields, f => f.Action == "theme.export");
+    }
+
+    [Fact]
+    public void Schema_ThemePresetReplacesTheme()
+    {
+        var s = new EmberSettings();
+        var f = SettingsSchema.Fields.First(x => x.Label == "Theme preset");
+        Assert.True(f.ReloadsOthers);
+        Assert.True(f.Set(s, "btop"));
+        Assert.Equal("btop", s.Theme.Name);
+        Assert.Equal("panel", s.Theme.Background.Kind);
+        Assert.False(f.Set(s, "nope"));
+    }
+
+    [Fact]
+    public void Schema_ColourValidation()
+    {
+        var s = new EmberSettings();
+        var f = SettingsSchema.Fields.First(x => x.Label == "CPU");
+        Assert.True(f.Set(s, "#abc"));
+        Assert.Equal("#AABBCC", s.Theme.Cpu);
+        Assert.False(f.Set(s, "red"));
+        var stops = SettingsSchema.Fields.First(x => x.Label.StartsWith("Graph colour stops"));
+        Assert.True(stops.Set(s, "#000000, #ffffff"));
+        Assert.Equal(new[] { "#000000", "#FFFFFF" }, s.Theme.GraphStops);
+        Assert.False(stops.Set(s, "#000000 nope"));
     }
 
     [Fact]

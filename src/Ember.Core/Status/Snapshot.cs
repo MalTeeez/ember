@@ -4,42 +4,48 @@ using Ember.Core.Net;
 namespace Ember.Core.Status;
 
 /// <summary>A process for a "└ top process" line.</summary>
-public sealed record ProcInfo(int Pid, string Name, string ValueText);
+public sealed record ProcInfo(int Pid, string Name, double Value, string ValueText);
 
 public sealed class CpuData
 {
     /// <summary>Combined load, % (may be above 100 with turbo; display is limited to 100).</summary>
-    public double Load { get; init; }
+    public double Load { get; set; }
     /// <summary>Raw load for each logical core, %.</summary>
-    public double[]? CoreLoads { get; init; }
+    public double[]? CoreLoads { get; set; }
     /// <summary>Core group (efficiency class) for each logical core. Null = one group.</summary>
-    public int[]? CoreGroups { get; init; }
+    public int[]? CoreGroups { get; set; }
     /// <summary>Package temperature, °C.</summary>
-    public double? Temp { get; init; }
+    public double? Temp { get; set; }
     /// <summary>% Processor Performance (_Total).</summary>
-    public double? Perf { get; init; }
+    public double? Perf { get; set; }
+    /// <summary>Effective clock of the whole CPU, MHz.</summary>
+    public double? ClockMHz { get; set; }
+    /// <summary>Effective clock of each logical core, MHz.</summary>
+    public double[]? CoreClocksMHz { get; set; }
+    /// <summary>Temperature of each logical core (from its physical core), °C. NaN = unknown.</summary>
+    public double[]? CoreTemps { get; set; }
 }
 
 public sealed class GpuData
 {
-    public required string Luid { get; init; }
-    public required string Name { get; init; }
-    public bool Integrated { get; init; }
-    public double? Load { get; init; }
-    public double? Temp { get; init; }
-    public double? VramUsedBytes { get; init; }
-    public double? VramTotalBytes { get; init; }
-    public ProcInfo? Top { get; init; }
-    public double TopLoad { get; init; }
+    public string Luid { get; set; } = "";
+    public string Name { get; set; } = "";
+    public bool Integrated { get; set; }
+    public double? Load { get; set; }
+    public double? Temp { get; set; }
+    public double? VramUsedBytes { get; set; }
+    public double? VramTotalBytes { get; set; }
+    /// <summary>Top processes on this GPU, highest first.</summary>
+    public IReadOnlyList<ProcInfo>? Tops { get; set; }
 }
 
 public sealed class MemData
 {
-    public ulong AvailBytes { get; init; }
-    public ulong TotalBytes { get; init; }
-    public ulong CommitBytes { get; init; }
-    public ulong CommitLimitBytes { get; init; }
-    public double? PagesInPerSec { get; init; }
+    public ulong AvailBytes { get; set; }
+    public ulong TotalBytes { get; set; }
+    public ulong CommitBytes { get; set; }
+    public ulong CommitLimitBytes { get; set; }
+    public double? PagesInPerSec { get; set; }
 }
 
 public sealed record DiskData(string Label, string Volumes, double ActivePercent, double Queue);
@@ -49,17 +55,18 @@ public sealed record VolumeData(string Root, double FreeBytes, double TotalBytes
 /// <summary>All sensor values of one sample. Null parts = source failed (item hidden).</summary>
 public sealed class Snapshot
 {
-    public DateTime Time { get; init; }
-    public CpuData? Cpu { get; init; }
-    public List<AdapterRate>? Net { get; init; }
+    public DateTime Time { get; set; }
+    public CpuData? Cpu { get; set; }
+    public List<AdapterRate>? Net { get; set; }
     public NetQuality? Quality { get; set; }
-    public List<GpuData>? Gpus { get; init; }
-    public MemData? Mem { get; init; }
-    public List<DiskData>? Disks { get; init; }
-    public List<VolumeData>? Volumes { get; init; }
-    public ProcInfo? TopCpu { get; init; }
-    public ProcInfo? TopMem { get; init; }
-    public ProcInfo? TopDisk { get; init; }
+    public List<GpuData>? Gpus { get; set; }
+    public MemData? Mem { get; set; }
+    public List<DiskData>? Disks { get; set; }
+    public List<VolumeData>? Volumes { get; set; }
+    /// <summary>Top processes, highest first (a few, so the shown one can stay).</summary>
+    public IReadOnlyList<ProcInfo>? TopCpu { get; set; }
+    public IReadOnlyList<ProcInfo>? TopMem { get; set; }
+    public IReadOnlyList<ProcInfo>? TopDisk { get; set; }
     public IReadOnlyList<ClaudeLine>? Claude { get; set; }
 }
 

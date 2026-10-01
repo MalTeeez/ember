@@ -10,13 +10,27 @@ public class ComposerTests
 {
     private static readonly DateTime T0 = new(2026, 10, 1, 12, 0, 0);
 
+    /// <summary>Default settings without the toolbar, hold 0 (no kept space) unless asked.</summary>
+    private static EmberSettings Cfg(double hold = 0)
+    {
+        var s = new EmberSettings();
+        s.Entries.First(e => e.Id == "toolbar").Enabled = false;
+        s.Layout.HoldSeconds = hold;
+        s.Layout.ProcessStickSeconds = 10;
+        return s;
+    }
+
+    private static List<ProcInfo> Procs(params (int Pid, string Name, double V)[] p)
+        => p.OrderByDescending(x => x.V).Select(x => new ProcInfo(x.Pid, x.Name, x.V, Format.Pct4(x.V))).ToList();
+
     private static Snapshot Snap(int sec, double load = 23, double? temp = 50, List<AdapterRate>? net = null,
         MemData? mem = null, List<VolumeData>? vols = null, IReadOnlyList<ClaudeLine>? claude = null,
-        double[]? cores = null, ProcInfo? topCpu = null, List<GpuData>? gpus = null, double? perf = 100)
+        double[]? cores = null, IReadOnlyList<ProcInfo>? topCpu = null, List<GpuData>? gpus = null, double? perf = 100,
+        double? clock = null, double[]? coreTemps = null, double[]? coreClocks = null)
         => new()
         {
             Time = T0.AddSeconds(sec),
-            Cpu = new CpuData { Load = load, Temp = temp, Perf = perf, CoreLoads = cores },
+            Cpu = new CpuData { Load = load, Temp = temp, Perf = perf, CoreLoads = cores, ClockMHz = clock, CoreTemps = coreTemps, CoreClocksMHz = coreClocks },
             Net = net ?? new List<AdapterRate> { new("Ethernet", 61e6, 2.1e6) },
             Mem = mem,
             Volumes = vols,
@@ -28,95 +42,125 @@ public class ComposerTests
     [Fact]
     public void NormalState_CpuAndNetwork()
     {
-        var c = new StatusComposer();
-        var lines = c.Compose(Snap(0), new EmberSettings());
+        var lines = new StatusComposer().Compose(Snap(0, clock: 4200), Cfg());
         Assert.Equal(3, lines.Count);
-        Assert.StartsWith("cpu  23%", lines[0].Text);
-        Assert.StartsWith("\u2193   61.0 Mbps", lines[1].Text);
-        Assert.EndsWith(" pk 61", lines[1].Text);
-        Assert.StartsWith("\u2191    2.1 Mbps", lines[2].Text);
+        Assert.StartsWith("cpu   23% 4.2G", lines[0].Text);
+        Assert.StartsWith("\u2193     61M   pk  61M", lines[1].Text);
+        Assert.StartsWith("\u2191    2.1M   pk 2.1M", lines[2].Text);
         Assert.All(lines, l => Assert.Equal(Layout.Width, l.Length));
-        // graph columns are braille
         Assert.All(lines[0].Text.Substring(Layout.GraphCol, Layout.GraphChars), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
     }
 
     [Fact]
-    public void LoadAbove100_IsLimited()
+    public void LabelsAlwaysHaveSpaceBeforeValue()
     {
-        var lines = new StatusComposer().Compose(Snap(0, load: 130), new EmberSettings());
-        Assert.StartsWith("cpu 100%", lines[0].Text);
+        var c = new StatusComposer();
+        var cfg = Cfg();
+        cfg.PreviewAll = true;
+        foreach (var l in c.Compose(Snap(0), cfg))
+        {
+            var t = l.Text;
+            // A label is followed by at least one space before its value (labels are at most 4 characters).
+            if (char.IsLetterOrDigit(t[0]) || t[0] is '\u2193' or '\u2191') Assert.True(t.IndexOf(' ') is > 0 and <= 4, t);
+        }
     }
 
     [Fact]
-    public void Temperature_ShowsAfterDelay_WithGradient()
+    public void LoadAbove100_IsLimited()
+        => Assert.StartsWith("cpu  100%", new StatusComposer().Compose(Snap(0, load: 130), Cfg())[0].Text);
+
+    [Fact]
+    public void Temperature_ShowsAfterDelay_WithThemeGradient()
     {
         var c = new StatusComposer();
-        var cfg = new EmberSettings();
+        var cfg = Cfg();
         for (int i = 0; i < 5; i++)
             Assert.DoesNotContain("\u00B0", c.Compose(Snap(i, temp: 92), cfg)[0].Text);
         var line = c.Compose(Snap(5, temp: 92), cfg)[0];
         Assert.Contains(" 92\u00B0", line.Text);
-        Assert.Contains(line.Runs, r => r.Text.Contains('\u00B0') && r.Color == Palette.Red);
+        var crit = Rgb.Parse(cfg.Theme.Crit, Palette.Red);
+        Assert.Contains(line.Runs, r => r.Text.Contains('\u00B0') && r.Color == crit);
     }
 
     [Fact]
     public void FailedSource_HidesImmediately()
     {
         var c = new StatusComposer();
-        var cfg = new EmberSettings();
+        var cfg = Cfg();
         for (int i = 0; i <= 6; i++) c.Compose(Snap(i, temp: 92), cfg);
         Assert.Contains("\u00B0", c.Compose(Snap(7, temp: 92), cfg)[0].Text);
         Assert.DoesNotContain("\u00B0", c.Compose(Snap(8, temp: null), cfg)[0].Text);
-        // Coming back needs the full show delay again.
         Assert.DoesNotContain("\u00B0", c.Compose(Snap(9, temp: 92), cfg)[0].Text);
     }
 
     [Fact]
-    public void TopProcess_RequestedWhenLoadHigh_ThenShown()
+    public void TopProcess_LineWithButtons()
     {
         var c = new StatusComposer();
-        var cfg = new EmberSettings();
+        var cfg = Cfg();
         c.Compose(Snap(0, load: 80), cfg);
         Assert.True(c.Needs.TopCpu);
         List<Line> lines = new();
-        for (int i = 1; i <= 5; i++) lines = c.Compose(Snap(i, load: 80, topCpu: new ProcInfo(42, "game.exe", "58%")), cfg);
-        var top = lines.Single(l => l.Click == ClickKind.Process);
-        Assert.Equal(42, top.Pid);
+        for (int i = 1; i <= 5; i++) lines = c.Compose(Snap(i, load: 80, topCpu: Procs((42, "game.exe", 58))), cfg);
+        var top = lines.Single(l => l.Pid == 42);
         Assert.StartsWith("  \u2514 game.exe", top.Text);
-        Assert.EndsWith("58%", top.Text);
+        Assert.Contains(" 58% ", top.Text);
+        Assert.Contains(top.Hits, h => h.Action == HitAction.ProcessKill && h.Arg == "42" && h.Width == 2);
+        Assert.Contains(top.Hits, h => h.Action == HitAction.ProcessProperties);
+        Assert.Contains(top.Hits, h => h.Action == HitAction.ProcessDetails && h.Width == Layout.Width);
+        Assert.Contains(top.Runs, r => (r.Style & RunStyle.Icon) != 0);
+        Assert.Equal(Layout.Width, top.Length);
+    }
+
+    [Fact]
+    public void TopProcess_IsSticky()
+    {
+        var c = new StatusComposer();
+        var cfg = Cfg();
+        List<Line> lines = new();
+        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, load: 80, topCpu: Procs((1, "a.exe", 60), (2, "b.exe", 50))), cfg);
+        Assert.Contains(lines, l => l.Pid == 1);
+        // b is higher now, but only for a short time: a stays.
+        for (int i = 6; i <= 10; i++) lines = c.Compose(Snap(i, load: 80, topCpu: Procs((1, "a.exe", 40), (2, "b.exe", 70))), cfg);
+        Assert.Contains(lines, l => l.Pid == 1 && l.Text.Contains(" 40%"));
+        for (int i = 11; i <= 17; i++) lines = c.Compose(Snap(i, load: 80, topCpu: Procs((1, "a.exe", 40), (2, "b.exe", 70))), cfg);
+        Assert.Contains(lines, l => l.Pid == 2);
     }
 
     [Fact]
     public void TopProcess_NotRequestedWhenIdle()
     {
         var c = new StatusComposer();
-        c.Compose(Snap(0, load: 10), new EmberSettings());
+        c.Compose(Snap(0, load: 10), Cfg());
         Assert.False(c.Needs.TopCpu);
         Assert.False(c.Needs.TopMem);
         Assert.False(c.Needs.TopDisk);
     }
 
     [Fact]
-    public void OutlierCore_LineWithBarAndMedianMarker()
+    public void HotCore_LoadClockTempGraph()
     {
         var c = new StatusComposer();
-        var cfg = new EmberSettings();
+        var cfg = Cfg();
         var cores = new double[] { 10, 10, 10, 10, 10, 10, 10, 100 };
+        var temps = Enumerable.Repeat(50.0, 8).ToArray();
+        temps[7] = 88;
+        var clocks = Enumerable.Repeat(3000.0, 8).ToArray();
+        clocks[7] = 5100;
         List<Line> lines = new();
-        for (int i = 0; i <= 6; i++) lines = c.Compose(Snap(i, load: 21, cores: cores), cfg);
-        var core = lines.Single(l => l.Text.StartsWith("  c7"));
-        Assert.Contains("\u2502", core.Text);
-        Assert.EndsWith("100%", core.Text);
+        for (int i = 0; i <= 6; i++) lines = c.Compose(Snap(i, load: 21, cores: cores, coreTemps: temps, coreClocks: clocks), cfg);
+        var core = lines.Single(l => l.Text.StartsWith("c7"));
+        Assert.StartsWith("c7   100% 5.1G  88\u00B0 ", core.Text);
+        Assert.All(core.Text.Substring(Layout.GraphCol, Layout.GraphChars), ch => Assert.InRange(ch, '\u2800', '\u28FF'));
     }
 
     [Fact]
     public void Throttling()
     {
         var c = new StatusComposer();
-        var cfg = new EmberSettings();
         List<Line> lines = new();
-        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, load: 70, perf: 60), cfg);
-        Assert.Contains(lines, l => l.Text.StartsWith("  throttled") && l.Text.EndsWith("60%"));
+        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, load: 70, perf: 60), Cfg());
+        Assert.Contains(lines, l => l.Text.Contains("throttled") && l.Text.EndsWith(" 60%"));
     }
 
     [Fact]
@@ -125,118 +169,194 @@ public class ComposerTests
         var c = new StatusComposer();
         var net = new List<AdapterRate> { new("Ethernet", 50e6, 1e6), new("Wi-Fi", 11e6, 1.1e6) };
         List<Line> lines = new();
-        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, net: net), new EmberSettings());
+        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, net: net), Cfg());
         Assert.Contains(lines, l => l.Text.Contains("Ethernet"));
         Assert.Contains(lines, l => l.Text.Contains("Wi-Fi"));
-
-        var single = new StatusComposer();
-        var one = new List<AdapterRate> { new("Ethernet", 50e6, 1e6), new("Wi-Fi", 0, 0) };
-        for (int i = 0; i <= 5; i++) lines = single.Compose(Snap(i, net: one), new EmberSettings());
-        Assert.DoesNotContain(lines, l => l.Text.Contains("Ethernet"));
     }
 
     [Fact]
-    public void MemorySection_HeaderOnlyWhenVisible()
+    public void Memory_HeaderOnlyWhenVisible_LowerCaseRule()
     {
         var c = new StatusComposer();
-        var cfg = new EmberSettings();
+        var cfg = Cfg();
         const ulong G = 1024UL * 1024 * 1024;
         var low = new MemData { AvailBytes = G / 2, TotalBytes = 16 * G, CommitBytes = 10 * G, CommitLimitBytes = 32 * G, PagesInPerSec = 10 };
         var ok = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = 10 * G, CommitLimitBytes = 32 * G, PagesInPerSec = 10 };
-        Assert.DoesNotContain(c.Compose(Snap(0, mem: ok), cfg), l => l.Text.Contains("M E M O R Y"));
+        Assert.DoesNotContain(c.Compose(Snap(0, mem: ok), cfg), l => l.Text.Contains("memory"));
         List<Line> lines = new();
         for (int i = 1; i <= 6; i++) lines = c.Compose(Snap(i, mem: low), cfg);
-        Assert.True(c.Needs.TopMem);
-        int h = lines.FindIndex(l => l.Text.Contains("M E M O R Y"));
+        int h = lines.FindIndex(l => l.Text.StartsWith("\u2500\u2500 memory \u2500"));
         Assert.True(h > 0);
         Assert.Equal("", lines[h - 1].Text.Trim());
-        Assert.StartsWith("ram", lines[h + 1].Text);
-        Assert.EndsWith("3%", lines[h + 1].Text);
-        Assert.Contains(lines[h + 1].Runs, r => r.Color == Palette.Red);
+        Assert.StartsWith("ram  512M available", lines[h + 1].Text);
+        Assert.EndsWith("  3%", lines[h + 1].Text);
     }
 
     [Fact]
-    public void FreeSpace_LowGbIsAtLeastAmber()
+    public void HeightIsKept_ThenShrinksAfterHold()
     {
         var c = new StatusComposer();
-        const double G = 1024.0 * 1024 * 1024;
-        var vols = new List<VolumeData> { new("D:\\", 15 * G, 100 * G) }; // 15% but < 20 GB
-        List<Line> lines = new();
-        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, vols: vols), new EmberSettings());
-        var line = lines.Single(l => l.Text.StartsWith("D:"));
-        Assert.Contains(line.Runs, r => r.Color == Palette.Amber);
+        var cfg = Cfg(hold: 30);
+        cfg.Intervals.HideDelaySeconds = 0;
+        const ulong G = 1024UL * 1024 * 1024;
+        var low = new MemData { AvailBytes = G / 2, TotalBytes = 16 * G, CommitBytes = 1, CommitLimitBytes = 32 * G };
+        var ok = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = 1, CommitLimitBytes = 32 * G };
+        int shown = 0;
+        for (int i = 0; i <= 6; i++) shown = c.Compose(Snap(i, mem: low), cfg).Count;
+        // The item hides, but its space (and the header) stays for the hold time.
+        var kept = c.Compose(Snap(8, mem: ok), cfg);
+        Assert.Equal(shown, kept.Count);
+        Assert.Contains(kept, l => l.IsPadding);
+        Assert.Contains(kept, l => l.Text.Contains("memory"));
+        var later = c.Compose(Snap(40, mem: ok), cfg);
+        Assert.True(later.Count < shown);
+        Assert.DoesNotContain(later, l => l.Text.Contains("memory"));
     }
 
     [Fact]
-    public void Claude_TwoLinesEach_AlwaysVisible()
+    public void FreeSpace_LowGbIsAtLeastWarning()
     {
-        var claude = new List<ClaudeLine>
-        {
-            new("5h", 42, TimeSpan.FromMinutes(190), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.MaxValue, TimeSpan.FromMinutes(190))),
-            new("wk", 18, TimeSpan.FromHours(98), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(10), TimeSpan.FromHours(98))),
-        };
-        var lines = new StatusComposer().Compose(Snap(0, claude: claude), new EmberSettings());
-        int h = lines.FindIndex(l => l.Text.StartsWith("\u2500 C L A U D E"));
+        var c = new StatusComposer();
+        var cfg = Cfg();
+        const double G = 1024.0 * 1024 * 1024;
+        var vols = new List<VolumeData> { new("D:\\", 15 * G, 100 * G) };
+        List<Line> lines = new();
+        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, vols: vols), cfg);
+        var line = lines.Single(l => l.Text.StartsWith("D:"));
+        Assert.Contains(line.Runs, r => r.Color == Rgb.Parse(cfg.Theme.Warn, Palette.Amber));
+    }
+
+    private static List<ClaudeLine> Claude() => new()
+    {
+        new("5h", 42, TimeSpan.FromMinutes(190), new ProjectionResult(ProjectionKind.Lasts, TimeSpan.MaxValue, TimeSpan.FromMinutes(190))),
+        new("wk", 18, TimeSpan.FromHours(98), new ProjectionResult(ProjectionKind.Limit, TimeSpan.FromHours(52), TimeSpan.FromHours(98))),
+    };
+
+    [Fact]
+    public void Claude_BarRefreshProjection()
+    {
+        var cfg = Cfg();
+        var lines = new StatusComposer().Compose(Snap(0, claude: Claude()), cfg);
+        int h = lines.FindIndex(l => l.Text.StartsWith("\u2500\u2500 claude"));
         Assert.True(h > 0);
-        Assert.StartsWith("5h  ████████▍", lines[h + 1].Text);
-        Assert.EndsWith("42%", lines[h + 1].Text);
-        Assert.StartsWith("    \u21BB 3h10", lines[h + 2].Text);
-        Assert.EndsWith("lasts", lines[h + 2].Text);
-        Assert.Contains(lines[h + 2].Runs, r => r.Text.EndsWith("lasts") && r.Color == Palette.Dim);
-        Assert.EndsWith("limit 10h00", lines[h + 4].Text);
-        Assert.Contains(lines[h + 4].Runs, r => r.Text.StartsWith("limit") && r.Color == Palette.Red);
+        Assert.StartsWith("5h   ::::::::", lines[h + 1].Text);
+        Assert.EndsWith(" 42%", lines[h + 1].Text);
+        // filled and empty cells differ in colour
+        Assert.True(lines[h + 1].Runs.Where(r => r.Text.Contains(':')).Select(r => r.Color).Distinct().Count() >= 2);
+        Assert.StartsWith("  " + Icons.Refresh + " refresh \u00B7", lines[h + 2].Text);
+        Assert.EndsWith(" 3h10m", lines[h + 2].Text);
+        Assert.Contains("will last", lines[h + 3].Text);
+        Assert.Contains("empty 1d22h before reset", lines[h + 6].Text);
+    }
+
+    [Theory]
+    [InlineData("squares", '\u25A0')]
+    [InlineData("pips", '\u2022')]
+    [InlineData("braille", '\u28FF')]
+    [InlineData("line", '\u2501')]
+    [InlineData("shade", '\u2588')]
+    public void Claude_BarStyles(string style, char on)
+    {
+        var cfg = Cfg();
+        cfg.Theme.BarStyle = style;
+        var lines = new StatusComposer().Compose(Snap(0, claude: Claude()), cfg);
+        Assert.Contains(lines, l => l.Text.StartsWith("5h   " + on));
     }
 
     [Fact]
     public void Claude_HiddenWhenNull()
-    {
-        var lines = new StatusComposer().Compose(Snap(0, claude: null), new EmberSettings());
-        Assert.DoesNotContain(lines, l => l.Text.Contains("C L A U D E"));
-    }
+        => Assert.DoesNotContain(new StatusComposer().Compose(Snap(0, claude: null), Cfg()), l => l.Text.Contains("claude"));
 
     [Fact]
-    public void Gpu_LoadAndTemp_OneLine()
+    public void Gpu_ModelLabel_LoadAndTemp()
     {
         var c = new StatusComposer();
         var gpus = new List<GpuData>
         {
-            new() { Luid = "0x0_0x1", Name = "NVIDIA GeForce RTX 4080", Load = 64, Temp = 71,
-                    Top = new ProcInfo(7, "game.exe", "58%"), TopLoad = 58 },
+            new() { Luid = "0x0_0x1", Name = "NVIDIA GeForce RTX 4090", Load = 64, Temp = 71, Tops = Procs((7, "game.exe", 58)) },
         };
         List<Line> lines = new();
-        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, gpus: gpus), new EmberSettings());
-        int h = lines.FindIndex(l => l.Text.StartsWith("\u2500 G P U"));
-        Assert.StartsWith("rtx  64%  71\u00B0 ", lines[h + 1].Text);
+        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, gpus: gpus), Cfg());
+        int h = lines.FindIndex(l => l.Text.StartsWith("\u2500\u2500 gpu"));
+        Assert.StartsWith("4090  64%       71\u00B0 ", lines[h + 1].Text);
         Assert.Equal(7, lines[h + 2].Pid);
     }
 
     [Fact]
-    public void Gpu_VramHiddenForIntegratedAndWhenOff()
+    public void Gpu_VramHiddenForIntegrated()
     {
         var c = new StatusComposer();
-        var cfg = new EmberSettings();
-        cfg.Items.GpuVram = true;
+        var cfg = Cfg();
+        cfg.Entries.First(e => e.Id == "gpu.vram").Enabled = true;
         const double G = 1024.0 * 1024 * 1024;
         var gpus = new List<GpuData>
         {
             new() { Luid = "a", Name = "Intel UHD", Integrated = true, Load = 0, VramUsedBytes = 0.99 * G, VramTotalBytes = G },
-            new() { Luid = "b", Name = "RTX", Load = 0, VramUsedBytes = 7.8 * G, VramTotalBytes = 8 * G },
+            new() { Luid = "b", Name = "RTX 4080", Load = 0, VramUsedBytes = 7.8 * G, VramTotalBytes = 8 * G },
         };
         List<Line> lines = new();
         for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, gpus: gpus), cfg);
-        Assert.Single(lines, l => l.Text.StartsWith("  vram"));
-        Assert.Contains(lines, l => l.Text.StartsWith("  vram  7.8/8.0 GB"));
-        cfg.Items.GpuVram = false;
-        lines = c.Compose(Snap(6, gpus: gpus), cfg);
-        Assert.DoesNotContain(lines, l => l.Text.StartsWith("  vram"));
+        Assert.Single(lines, l => l.Text.StartsWith("vram"));
+        Assert.Contains(lines, l => l.Text.StartsWith("vram 7.8G / 8.0G"));
     }
 
     [Fact]
-    public void ItemsOff_AreHidden()
+    public void Layout_Reorder_And_Spacers()
+    {
+        var cfg = Cfg();
+        var down = cfg.Entries.First(e => e.Id == "net.down");
+        cfg.Entries.Remove(down);
+        cfg.Entries.Insert(0, down);
+        cfg.Entries.Insert(1, LayoutEntry.Spacer("custom", "~ hello ~", collapse: false));
+        var lines = new StatusComposer().Compose(Snap(0), cfg);
+        Assert.StartsWith("\u2193", lines[0].Text);
+        Assert.StartsWith("~ hello ~", lines[1].Text);
+        Assert.StartsWith("cpu", lines[2].Text);
+    }
+
+    [Fact]
+    public void Layout_DisabledItemsAreHidden()
+    {
+        var cfg = Cfg();
+        foreach (var e in cfg.Entries) e.Enabled = false;
+        Assert.Empty(new StatusComposer().Compose(Snap(0), cfg));
+    }
+
+    [Fact]
+    public void Toolbar_Buttons()
     {
         var cfg = new EmberSettings();
-        cfg.Items.CpuLoad = false;
-        cfg.Items.Network = false;
-        Assert.Empty(new StatusComposer().Compose(Snap(0), cfg));
+        var ctx = new ComposeContext { MinimizedNotes = new[] { ("n1", "Shopping") } };
+        var lines = new StatusComposer().Compose(Snap(0), cfg, ctx);
+        var bar = lines[0];
+        Assert.Contains(bar.Hits, h => h.Action == HitAction.NewNote && h.Col == 0);
+        Assert.Contains(bar.Hits, h => h.Action == HitAction.RestoreNote && h.Arg == "n1" && h.Tooltip == "Shopping");
+        Assert.Contains(bar.Hits, h => h.Action == HitAction.HideWidget && h.Col == Layout.Width - 2);
+    }
+
+    [Fact]
+    public void PreviewAll_ShowsEverythingAtOnce()
+    {
+        var cfg = new EmberSettings { PreviewAll = true };
+        foreach (var e in cfg.Entries) e.Enabled = true;
+        var lines = new StatusComposer().Compose(new Snapshot { Time = T0 }, cfg);
+        string all = string.Join("\n", lines.Select(l => l.Text));
+        foreach (var h in new[] { "gpu", "memory", "disk", "claude" }) Assert.Contains(h, all);
+        Assert.Contains("throttled", all);
+        Assert.Contains("vram", all);
+        Assert.Contains("loss", all);
+        Assert.Contains(lines, l => l.Pid != 0);
+        Assert.All(lines, l => Assert.Equal(Layout.Width, l.Length));
+    }
+
+    [Fact]
+    public void GraphCells_ColouredByIntensity()
+    {
+        var c = new StatusComposer();
+        var cfg = Cfg();
+        List<Line> lines = new();
+        for (int i = 0; i < 24; i++) lines = c.Compose(Snap(i, load: i < 12 ? 2 : 98), cfg);
+        var graphRuns = lines[0].Runs.Where(r => r.Text.Any(ch => ch >= '\u2800' && ch <= '\u28FF')).ToList();
+        Assert.True(graphRuns.Select(r => r.Color).Distinct().Count() >= 2);
     }
 }

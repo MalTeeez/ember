@@ -103,3 +103,41 @@ public sealed class History
     public int Count => _q.Count;
     public void Clear() => _q.Clear();
 }
+
+/// <summary>A hot core for the core grid.</summary>
+public readonly record struct HotCore(int Index, double Load, double Temp, double ClockMHz, double Score);
+
+/// <summary>
+/// Hot-core grid (btop style): 1 column for up to 3 cores, 2 columns for up to 6, 3 columns for up to 9;
+/// never more than 3 rows. Cores beyond 9 are summed up in one extra line. The cores to show are
+/// chosen by a score of load and temperature: a core that is unusually hot counts even at moderate load.
+/// </summary>
+public static class CoreGrid
+{
+    public const int MaxRows = 3, MaxColumns = 3, MaxCells = MaxRows * MaxColumns;
+
+    public static int Columns(int count) => count <= MaxRows ? 1 : count <= 2 * MaxRows ? 2 : MaxColumns;
+
+    /// <summary>
+    /// Score = load + 3 × (temperature above the median core temperature + 3 °C) + 30 × temperature severity (0..2).
+    /// Without a temperature (NaN) the score is the load.
+    /// </summary>
+    public static double Score(double load, double temp, double medianTemp, double warn, double crit)
+    {
+        if (double.IsNaN(temp)) return load;
+        double unusual = double.IsNaN(medianTemp) ? 0 : Math.Max(0, temp - medianTemp - 3);
+        return load + 3 * unusual + 30 * Render.Gradient.Severity(temp, warn, crit);
+    }
+
+    /// <summary>Shown cores (best score first, then sorted by core number) and the hidden rest.</summary>
+    public static (List<HotCore> Shown, List<HotCore> Hidden) Select(IEnumerable<HotCore> hot)
+    {
+        var ordered = hot.OrderByDescending(c => c.Score).ThenBy(c => c.Index).ToList();
+        var shown = ordered.Take(MaxCells).OrderBy(c => c.Index).ToList();
+        var hidden = ordered.Skip(MaxCells).ToList();
+        return (shown, hidden);
+    }
+
+    /// <summary>Kubernetes-style total: one fully used core = 100 %.</summary>
+    public static double CoreSum(IEnumerable<HotCore> cores) => cores.Sum(c => c.Load);
+}

@@ -49,43 +49,43 @@ internal sealed class ProcessTracker
 
     private static bool Skip(ProcSample p) => p.Pid <= 4 || p.Name is "Idle" or "System" or "Memory Compression" or "Registry";
 
-    /// <summary>Highest CPU % of the whole machine (100 % = all logical cores).</summary>
-    public ProcInfo? TopCpu()
+    private const int TopCount = 5;
+
+    /// <summary>Highest CPU % of the whole machine (100 % = all logical cores), highest first.</summary>
+    public List<ProcInfo>? TopCpu()
     {
         if (!_hasPrev) return null;
-        ProcSample? best = null;
-        double bestCpu = 0;
+        var list = new List<(ProcSample P, double V)>();
         foreach (var (key, p) in _cur)
         {
             if (Skip(p) || !_prev.TryGetValue(key, out var old)) continue;
-            double cpu = (p.CpuTime - old.CpuTime) / 1e7 / Seconds / Cpus * 100;
-            if (cpu > bestCpu) { bestCpu = cpu; best = p; }
+            list.Add((p, (p.CpuTime - old.CpuTime) / 1e7 / Seconds / Cpus * 100));
         }
-        return best is { } b ? new ProcInfo(b.Pid, b.Name, Format.Percent(bestCpu, 1).Trim()) : null;
+        return Top(list, v => Format.Pct4(v).Trim());
     }
 
-    /// <summary>Highest private bytes.</summary>
-    public ProcInfo? TopMemory()
-    {
-        ProcSample? best = null;
-        foreach (var p in _cur.Values)
-            if (!Skip(p) && (best == null || p.PrivateBytes > best.Value.PrivateBytes)) best = p;
-        return best is { } b ? new ProcInfo(b.Pid, b.Name, Format.Bytes(b.PrivateBytes)) : null;
-    }
+    /// <summary>Highest private bytes, highest first.</summary>
+    public List<ProcInfo>? TopMemory()
+        => Top(_cur.Values.Where(p => !Skip(p)).Select(p => (p, (double)p.PrivateBytes)).ToList(), v => Format.Bytes4(v).Trim());
 
-    /// <summary>Highest read+write bytes/s (also counts network I/O, so approximate).</summary>
-    public ProcInfo? TopDisk()
+    /// <summary>Highest read+write bytes/s (also counts network I/O, so approximate), highest first.</summary>
+    public List<ProcInfo>? TopDisk()
     {
         if (!_hasPrev) return null;
-        ProcSample? best = null;
-        double bestRate = 0;
+        var list = new List<(ProcSample P, double V)>();
         foreach (var (key, p) in _cur)
         {
             if (Skip(p) || !_prev.TryGetValue(key, out var old)) continue;
-            double rate = p.IoBytes >= old.IoBytes ? (p.IoBytes - old.IoBytes) / Seconds : 0;
-            if (rate > bestRate) { bestRate = rate; best = p; }
+            list.Add((p, p.IoBytes >= old.IoBytes ? (p.IoBytes - old.IoBytes) / Seconds : 0));
         }
-        return best is { } b ? new ProcInfo(b.Pid, b.Name, Format.BytesPerSecond(bestRate)) : null;
+        return Top(list, v => Format.Bytes4(v).Trim() + "/s");
+    }
+
+    private static List<ProcInfo>? Top(List<(ProcSample P, double V)> list, Func<double, string> fmt)
+    {
+        if (list.Count == 0) return null;
+        return list.OrderByDescending(x => x.V).Take(TopCount)
+            .Select(x => new ProcInfo(x.P.Pid, x.P.Name, x.V, fmt(x.V))).ToList();
     }
 
     /// <summary>A fresh process list for tree operations.</summary>

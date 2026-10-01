@@ -16,7 +16,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
 {
     public const string HostClass = "Ember.Host";
     private const uint WM_SNAPSHOT = W.WM_APP + 1, WM_TRAY = W.WM_APP + 2, WM_CLAUDE = W.WM_APP + 3;
-    private const int CmdNewNote = 1, CmdEdit = 2, CmdSettings = 3, CmdExit = 9;
+    private const int CmdNewNote = 1, CmdEdit = 2, CmdSettings = 3, CmdShow = 4, CmdPreview = 5, CmdExit = 9;
 
     public static readonly uint ActivateMessage = W.RegisterWindowMessage("Ember.Activate");
     private static readonly uint TaskbarCreated = W.RegisterWindowMessage("TaskbarCreated");
@@ -108,7 +108,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
     {
         var snap = Interlocked.Exchange(ref _pending, null);
         if (snap == null) return;
-        var lines = _composer.Compose(snap, _settings);
+        var lines = _composer.Compose(snap, _settings, ComposeContext());
         _widget.Render(lines);
     }
 
@@ -132,12 +132,22 @@ internal sealed partial class AppHost : Win32Window, IDisposable
 
     private void ShowTrayMenu(POINT pt)
     {
-        int cmd = TrayIcon.ShowMenu(Handle, pt,
+        var items = new List<(int, string, bool)>
+        {
+            (CmdShow, "Show widget", !_widget.Hidden),
             (CmdNewNote, "New note", false),
+        };
+        items.AddRange(MinimizedNoteMenuItems());
+        items.AddRange(new (int, string, bool)[]
+        {
+            (0, "", false),
             (CmdEdit, "Edit layout", _widget.EditMode),
+            (CmdPreview, "Show everything (theming preview)", _settings.PreviewAll),
             (CmdSettings, "Settings…", false),
             (0, "", false),
-            (CmdExit, "Exit", false));
+            (CmdExit, "Exit", false),
+        });
+        int cmd = TrayIcon.ShowMenu(Handle, pt, items.ToArray());
         RunCommand(cmd);
     }
 
@@ -146,6 +156,16 @@ internal sealed partial class AppHost : Win32Window, IDisposable
         switch (cmd)
         {
             case CmdNewNote: NewNote(); break;
+            case CmdShow: _widget.SetHidden(!_widget.Hidden); break;
+            case CmdPreview:
+            {
+                var s = SettingsStore.Clone(_settings);
+                s.PreviewAll = !s.PreviewAll;
+                ApplySettings(s, save: true);
+                _settingsWindow?.Reload(_settings);
+                break;
+            }
+            case >= CmdRestoreNoteBase: RestoreNoteByMenu(cmd - CmdRestoreNoteBase); break;
             case CmdEdit: _widget.SetEditMode(!_widget.EditMode); break;
             case CmdSettings: OpenSettings(); break;
             case CmdExit: W.DestroyWindow(Handle); break;
@@ -157,6 +177,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
         int cmd = TrayIcon.ShowMenu(Handle, pt,
             (CmdSettings, "Settings…", false),
             (CmdNewNote, "New note", false),
+            (CmdPreview, "Show everything (theming preview)", _settings.PreviewAll),
             (CmdEdit, "Done (leave edit mode)", false));
         RunCommand(cmd);
     }

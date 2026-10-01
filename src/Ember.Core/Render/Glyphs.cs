@@ -79,4 +79,36 @@ public static class Glyphs
         int cell = (int)Math.Floor(Math.Clamp(fraction, 0, 1) * width);
         return Math.Clamp(cell, 0, width - 1);
     }
+
+    /// <summary>
+    /// Usage bar in a style. Returns the text and the number of filled cells (the caller colours
+    /// filled and empty cells differently). "blocks" uses 1/8 steps; the other styles use one glyph
+    /// for filled and one for empty cells.
+    /// </summary>
+    public static (string Text, int Filled) StyledBar(double fraction, int width, string style)
+    {
+        if (double.IsNaN(fraction)) fraction = 0;
+        fraction = Math.Clamp(fraction, 0, 1);
+        if (style == "blocks")
+        {
+            string bar = Bar(fraction, width);
+            int filled = bar.Count(ch => ch != ' ');
+            // Empty cells show a dim dot so the bar length is visible.
+            return (string.Concat(bar.Select(ch => ch == ' ' ? '\u00B7' : ch)), filled);
+        }
+        var (on, off) = BarGlyphs(style);
+        int n = (int)Math.Round(fraction * width, MidpointRounding.AwayFromZero);
+        if (fraction > 0 && n == 0) n = 1; // any use shows at least one cell
+        return (new string(on, n) + new string(off, width - n), n);
+    }
+
+    public static (char On, char Off) BarGlyphs(string style) => style switch
+    {
+        "squares" => ('\u25A0', '\u25A0'),   // ■ ■
+        "pips" => ('\u2022', '\u00B7'),      // • ·
+        "braille" => ('\u28FF', '\u28C0'),   // ⣿ ⣀
+        "line" => ('\u2501', '\u2500'),      // ━ ─
+        "shade" => ('\u2588', '\u2591'),     // █ ░
+        _ => (':', ':'),                     // colons
+    };
 }

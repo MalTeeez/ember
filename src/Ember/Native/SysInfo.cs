@@ -65,10 +65,13 @@ internal static class SysInfo
 
     // ───────── CPU sets (core efficiency class) ─────────
 
-    /// <summary>Efficiency class for each (group, logical processor index). Empty on failure.</summary>
-    public static Dictionary<(int Group, int Index), int> CpuEfficiencyClasses()
+    /// <summary>
+    /// Efficiency class and physical core index for each (group, logical processor index). Empty on failure.
+    /// CoreIndex is the same for both threads of one physical core.
+    /// </summary>
+    public static Dictionary<(int Group, int Index), (int Efficiency, int Core)> CpuSets()
     {
-        var map = new Dictionary<(int, int), int>();
+        var map = new Dictionary<(int, int), (int, int)>();
         try
         {
             W.GetSystemCpuSetInformation(IntPtr.Zero, 0, out uint len, IntPtr.Zero, 0);
@@ -88,8 +91,9 @@ internal static class SysInfo
                     {
                         int group = (ushort)Marshal.ReadInt16(e + 12);
                         int lp = Marshal.ReadByte(e + 14);
+                        int core = Marshal.ReadByte(e + 15);
                         int eff = Marshal.ReadByte(e + 18);
-                        map[(group, lp)] = eff;
+                        map[(group, lp)] = (eff, group * 256 + core);
                     }
                     off += size;
                 }

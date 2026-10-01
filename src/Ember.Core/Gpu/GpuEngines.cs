@@ -46,17 +46,36 @@ public static partial class GpuNames
 
     public static string NormalizeLuid(string luid) => luid.ToUpperInvariant().Replace("0X", "0x");
 
-    /// <summary>Short 3-letter label from an adapter name: "rtx", "gtx", "rx", "arc", "igp", "gpu".</summary>
+    private static readonly HashSet<string> NameNoise = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "NVIDIA", "GeForce", "AMD", "ATI", "Radeon", "Intel", "R", "TM", "C", "Graphics", "RTX", "GTX", "RX", "Arc",
+        "Laptop", "GPU", "Mobile", "Max", "Q", "Design", "Series", "Quadro", "Iris", "Xe", "UHD", "HD", "Pro",
+    };
+
+    /// <summary>
+    /// Short label (at most 4 characters) that shows what differs between GPUs: the model number.
+    /// "NVIDIA GeForce RTX 4090" → "4090", "AMD Radeon RX 7900 XTX" → "7900", "Intel(R) Arc(TM) A770" → "A770",
+    /// "AMD Radeon 780M" → "780M". Without a model number: "igpu" (integrated) or "gpu".
+    /// </summary>
     public static string ShortLabel(string adapterName, bool integrated)
     {
-        string n = adapterName.ToUpperInvariant();
-        if (n.Contains("RTX")) return "rtx";
-        if (n.Contains("GTX")) return "gtx";
-        if (n.Contains("QUADRO")) return "qdr";
-        if (Regex.IsMatch(n, @"\bRX\b")) return "rx";
-        if (n.Contains(" ARC")) return "arc";
-        if (integrated) return "igp";
-        return "gpu";
+        var tokens = Regex.Split(adapterName, "[^A-Za-z0-9]+").Where(t => t.Length > 0 && !NameNoise.Contains(t)).ToList();
+        var model = tokens.FirstOrDefault(t => t.Any(char.IsDigit));
+        if (model != null) return model.Length <= 4 ? model : model[..4];
+        return integrated ? "igpu" : "gpu";
+    }
+
+    /// <summary>Labels for several GPUs; equal labels get a number ("4090", "4092").</summary>
+    public static List<string> Labels(IReadOnlyList<(string Name, bool Integrated)> gpus)
+    {
+        var labels = gpus.Select(g => ShortLabel(g.Name, g.Integrated)).ToList();
+        foreach (var dup in labels.GroupBy(l => l).Where(g => g.Count() > 1).Select(g => g.Key).ToList())
+        {
+            int n = 1;
+            for (int i = 0; i < labels.Count; i++)
+                if (labels[i] == dup) labels[i] = dup[..Math.Min(3, dup.Length)] + n++;
+        }
+        return labels;
     }
 }
 

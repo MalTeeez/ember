@@ -14,11 +14,11 @@ internal sealed partial class Sampler
 
     private void UpdateMemDiskCounters(EmberSettings cfg)
     {
-        bool pf = cfg.Items.MemPageFaults;
+        bool pf = cfg.IsOn("mem.pagein") || cfg.PreviewAll;
         if (pf && _pagesIn == null) _pagesIn = _pdh.Add(@"\Memory\Pages Input/sec");
         else if (!pf && _pagesIn != null) { _pdh.Remove(_pagesIn); _pagesIn = null; }
 
-        bool disk = cfg.Items.DiskBusy;
+        bool disk = cfg.IsOn("disk.busy") || cfg.PreviewAll;
         if (disk && _diskIdle == null)
         {
             _diskIdle = _pdh.Add(@"\PhysicalDisk(*)\% Idle Time");
@@ -34,8 +34,7 @@ internal sealed partial class Sampler
 
     private MemData? ReadMemory(EmberSettings cfg, bool pdhOk)
     {
-        var it = cfg.Items;
-        if (!(it.MemAvailable || it.MemCommit || it.MemPageFaults)) return null;
+        if (!(cfg.IsOn("mem.avail") || cfg.IsOn("mem.commit") || cfg.IsOn("mem.pagein") || cfg.PreviewAll)) return null;
         if (!SysInfo.Memory(out ulong avail, out ulong total))
         {
             Log.SourceFailed("memory");
@@ -54,7 +53,7 @@ internal sealed partial class Sampler
 
     private List<DiskData>? ReadDisks(EmberSettings cfg)
     {
-        if (!cfg.Items.DiskBusy || _diskIdle?.Array() is not { } idle) return null;
+        if (_diskIdle?.Array() is not { } idle) return null;
         var queue = _diskQueue?.Array()?.ToDictionary(x => x.Instance, x => x.Value) ?? new();
         var list = new List<DiskData>();
         foreach (var (inst, idleValue) in idle)

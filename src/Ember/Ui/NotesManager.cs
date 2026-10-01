@@ -6,7 +6,8 @@ using Ember.Native;
 namespace Ember.Ui;
 
 /// <summary>
-/// All notes. One .md file per note in %APPDATA%\Ember\notes\; window positions in notes.json there.
+/// All notes. One .md file per note in %APPDATA%\Ember\notes\; window positions, sizes and the
+/// minimized state in notes.json there. Minimized notes show as icons in the widget toolbar.
 /// </summary>
 internal sealed class NotesManager
 {
@@ -17,13 +18,17 @@ internal sealed class NotesManager
         public int Y { get; set; }
         public int W { get; set; }
         public int H { get; set; }
+        public bool Minimized { get; set; }
     }
 
     private readonly Dictionary<string, NoteWindow> _notes = new();
     private Dictionary<string, Entry> _index = new();
-    private LayoutSettings _layout;
+    private EmberSettings _cfg;
 
-    public NotesManager(LayoutSettings layout) => _layout = layout;
+    /// <summary>A note was minimized, restored or deleted (the widget toolbar changes).</summary>
+    public event Action? MinimizedChanged;
+
+    public NotesManager(EmberSettings cfg) => _cfg = cfg;
 
     private static string FileOf(string id) => Path.Combine(Paths.NotesDir, id + ".md");
 
@@ -49,7 +54,8 @@ internal sealed class NotesManager
             {
                 string id = Path.GetFileNameWithoutExtension(file);
                 string text = File.ReadAllText(file);
-                Open(id, text, _index.TryGetValue(id, out var e) ? new RECT(e.X, e.Y, e.X + e.W, e.Y + e.H) : DefaultRect(n++));
+                bool has = _index.TryGetValue(id, out var e);
+                Open(id, text, has ? new RECT(e!.X, e.Y, e.X + e.W, e.Y + e.H) : DefaultRect(n++), has && e!.Minimized);
             }
         }
         catch (Exception ex)
@@ -61,30 +67,48 @@ internal sealed class NotesManager
     public void New()
     {
         string id = DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..4];
-        var note = Open(id, "", DefaultRect(_notes.Count));
+        var note = Open(id, "", DefaultRect(_notes.Count), minimized: false);
         SaveText(note);
         SaveIndex();
         note.Focus();
+    }
+
+    /// <summary>Minimized notes in creation order: id and title.</summary>
+    public IReadOnlyList<(string Id, string Title)> Minimized()
+        => _notes.Values.Where(n => n.Minimized).OrderBy(n => n.Id, StringComparer.Ordinal).Select(n => (n.Id, n.Title)).ToList();
+
+    public void Restore(string id)
+    {
+        if (!_notes.TryGetValue(id, out var note)) return;
+        note.SetMinimized(false);
+        SaveIndex();
+        MinimizedChanged?.Invoke();
     }
 
     private static RECT DefaultRect(int n)
     {
         var mon = Monitors.Get(0);
         float s = Monitors.Dpi(mon.Handle) / 96f;
-        int w = (int)(280 * s), h = (int)(200 * s), step = (int)(24 * s) * (n % 8);
+        int w = (int)(300 * s), h = (int)(220 * s), step = (int)(24 * s) * (n % 8);
         int x = mon.Work.Left + (mon.Work.Width - w) / 2 + step;
         int y = mon.Work.Top + (mon.Work.Height - h) / 3 + step;
         return new RECT(x, y, x + w, y + h);
     }
 
-    private NoteWindow Open(string id, string text, RECT rect)
+    private NoteWindow Open(string id, string text, RECT rect, bool minimized)
     {
-        var note = new NoteWindow(id, text, _layout);
-        note.Changed += SaveText;
+        var note = new NoteWindow(id, text, _cfg);
+        note.Changed += n => { SaveText(n); if (n.Minimized) MinimizedChanged?.Invoke(); };
         note.MovedOrSized += _ => SaveIndex();
         note.DeleteRequested += Delete;
+        note.MinimizeRequested += n =>
+        {
+            n.SetMinimized(true);
+            SaveIndex();
+            MinimizedChanged?.Invoke();
+        };
         note.NewRequested += New;
-        note.Create(KeepOnScreen(rect));
+        note.Create(KeepOnScreen(rect), minimized);
         _notes[id] = note;
         return note;
     }
@@ -100,6 +124,7 @@ internal sealed class NotesManager
         return new RECT(x, y, x + r.Width, y + r.Height);
     }
 
+    /// <summary>Deletes at once (close button: no confirmation).</summary>
     private void Delete(NoteWindow note)
     {
         _notes.Remove(note.Id);
@@ -108,6 +133,7 @@ internal sealed class NotesManager
         try { File.Delete(FileOf(note.Id)); }
         catch (Exception ex) { Log.Write("note delete failed: " + ex.Message); }
         SaveIndex();
+        MinimizedChanged?.Invoke();
     }
 
     private static void SaveText(NoteWindow note)
@@ -134,8 +160,9 @@ internal sealed class NotesManager
             foreach (var n in _notes.Values)
             {
                 var b = n.Bounds;
+                if (b.Width <= 0 && _index.ContainsKey(n.Id)) { _index[n.Id].Minimized = n.Minimized; continue; }
                 if (b.Width <= 0) continue;
-                _index[n.Id] = new Entry { Id = n.Id, X = b.Left, Y = b.Top, W = b.Width, H = b.Height };
+                _index[n.Id] = new Entry { Id = n.Id, X = b.Left, Y = b.Top, W = b.Width, H = b.Height, Minimized = n.Minimized };
             }
             Directory.CreateDirectory(Paths.NotesDir);
             string tmp = Paths.NotesIndex + ".tmp";
@@ -148,10 +175,10 @@ internal sealed class NotesManager
         }
     }
 
-    public void ApplyLayout(LayoutSettings layout)
+    public void ApplySettings(EmberSettings cfg)
     {
-        _layout = layout;
-        foreach (var n in _notes.Values) n.ApplyLayout(layout);
+        _cfg = cfg;
+        foreach (var n in _notes.Values) n.ApplySettings(cfg);
     }
 
     public void Reattach()

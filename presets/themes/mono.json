@@ -1,0 +1,42 @@
+{
+  "Name": "mono",
+  "Text": "#E8E8E8",
+  "Label": "#8A8A8A",
+  "Unit": "#707070",
+  "Dim": "#505050",
+  "Header": "#9A9A9A",
+  "Rule": "#505050",
+  "Icon": "#8A8A8A",
+  "Warn": "#FFB000",
+  "Crit": "#FF453A",
+  "Cpu": "#E8E8E8",
+  "NetDown": "#E8E8E8",
+  "NetUp": "#E8E8E8",
+  "Gpu": "#E8E8E8",
+  "Memory": "#E8E8E8",
+  "Disk": "#E8E8E8",
+  "Claude": "#E8E8E8",
+  "Process": "#E8E8E8",
+  "GraphColoring": "mono",
+  "GraphStops": [
+    "#E8E8E8"
+  ],
+  "BarStyle": "blocks",
+  "BarGradient": false,
+  "HeaderStyle": "spaced",
+  "HeaderUpper": true,
+  "HeaderBold": false,
+  "BoldValues": false,
+  "Background": {
+    "Kind": "none",
+    "Color": "#14100D",
+    "Color2": "#000000",
+    "Opacity": 0,
+    "CornerRadius": 0,
+    "Border": "#FFFFFF",
+    "BorderOpacity": 0,
+    "Padding": 6,
+    "GradientAngle": 90,
+    "TextShadow": true
+  }
+}

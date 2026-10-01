@@ -18,28 +18,29 @@ internal sealed partial class Sampler
     /// <summary>GPU load of each process (busiest engine), from the last sample. Null if not measured.</summary>
     public volatile Dictionary<int, double>? GpuByPid;
 
-    private static Dictionary<int, double> PerProcess(List<(string Instance, double Value)> engines)
+    /// <summary>For each adapter (LUID) and process: the load on its busiest engine.</summary>
+    private static Dictionary<(string Luid, int Pid), double> PerProcess(List<(string Instance, double Value)> engines)
     {
-        var perEngine = new Dictionary<(int Pid, string Engine), double>();
+        var perEngine = new Dictionary<(string Luid, int Pid, string Engine), double>();
         foreach (var (inst, v) in engines)
             if (GpuNames.TryParseEngine(inst, out var e) && e.Pid > 0)
-                perEngine[(e.Pid, e.EngineKey)] = perEngine.GetValueOrDefault((e.Pid, e.EngineKey)) + v;
-        var result = new Dictionary<int, double>();
-        foreach (var ((pid, _), v) in perEngine)
-            result[pid] = Math.Max(result.GetValueOrDefault(pid), Math.Min(100, v));
+                perEngine[(e.Luid, e.Pid, e.EngineKey)] = perEngine.GetValueOrDefault((e.Luid, e.Pid, e.EngineKey)) + v;
+        var result = new Dictionary<(string, int), double>();
+        foreach (var ((luid, pid, _), v) in perEngine)
+            result[(luid, pid)] = Math.Max(result.GetValueOrDefault((luid, pid)), Math.Min(100, v));
         return result;
     }
 
     private static bool AnyGpuItem(EmberSettings cfg)
-        => cfg.Items.GpuLoad || cfg.Items.GpuTemp || cfg.Items.GpuVram || cfg.Items.GpuTopProcess;
+        => cfg.IsOn("gpu.load") || cfg.IsOn("gpu.vram") || cfg.IsOn("gpu.top") || cfg.PreviewAll;
 
     private void UpdateGpuCounters(EmberSettings cfg)
     {
-        bool engine = cfg.Items.GpuLoad || cfg.Items.GpuTopProcess;
+        bool engine = cfg.IsOn("gpu.load") || cfg.IsOn("gpu.top") || cfg.PreviewAll;
         if (engine && _gpuEngine == null) _gpuEngine = _pdh.Add(@"\GPU Engine(*)\Utilization Percentage");
         else if (!engine && _gpuEngine != null) { _pdh.Remove(_gpuEngine); _gpuEngine = null; }
 
-        bool mem = cfg.Items.GpuVram;
+        bool mem = cfg.IsOn("gpu.vram") || cfg.PreviewAll;
         if (mem && _gpuMem == null) _gpuMem = _pdh.Add(@"\GPU Adapter Memory(*)\Dedicated Usage");
         else if (!mem && _gpuMem != null) { _pdh.Remove(_gpuMem); _gpuMem = null; }
     }
@@ -66,10 +67,14 @@ internal sealed partial class Sampler
         if (_adapters.Count == 0) return null;
 
         Dictionary<string, GpuAdapterLoad>? loads = null;
+        Dictionary<(string Luid, int Pid), double>? perProcess = null;
         if (_gpuEngine?.Array() is { } engines)
         {
             loads = GpuAggregator.Aggregate(engines);
-            GpuByPid = PerProcess(engines);
+            perProcess = PerProcess(engines);
+            var byPid = new Dictionary<int, double>();
+            foreach (var ((_, pid), v) in perProcess) byPid[pid] = Math.Max(byPid.GetValueOrDefault(pid), v);
+            GpuByPid = byPid;
         }
         else GpuByPid = null;
 
@@ -87,9 +92,11 @@ internal sealed partial class Sampler
             GpuAdapterLoad? load = loads?.GetValueOrDefault(a.Luid);
             // No engine instance for an adapter with a counter = idle (0 %).
             double? loadValue = loads == null ? null : load?.Load ?? 0;
-            ProcInfo? top = null;
-            if (load is { TopPid: > 0 } l && cfg.Items.GpuTopProcess && l.Load >= cfg.Thresholds.GpuTopProcessLoad * 0.5)
-                top = new ProcInfo(l.TopPid, PidName(l.TopPid), Core.Render.Format.Percent(l.TopPidLoad, 1).Trim());
+            // Top processes (names only while the GPU is busy enough to show them; names cost a process open each).
+            List<ProcInfo>? tops = null;
+            if (perProcess != null && (cfg.IsOn("gpu.top") || cfg.PreviewAll) && (load?.Load ?? 0) >= cfg.Thresholds.GpuTopProcessLoad * 0.5)
+                tops = perProcess.Where(kv => kv.Key.Luid == a.Luid && kv.Value > 0).OrderByDescending(kv => kv.Value).Take(5)
+                    .Select(kv => new ProcInfo(kv.Key.Pid, PidName(kv.Key.Pid), kv.Value, Core.Render.Format.Pct4(kv.Value).Trim())).ToList();
             result.Add(new GpuData
             {
                 Luid = a.Luid,
@@ -99,8 +106,7 @@ internal sealed partial class Sampler
                 Temp = MatchTemp(a.Name),
                 VramUsedBytes = vram?.GetValueOrDefault(a.Luid),
                 VramTotalBytes = a.DedicatedVideoMemory > 0 ? a.DedicatedVideoMemory : null,
-                Top = top,
-                TopLoad = load?.TopPidLoad ?? 0,
+                Tops = tops,
             });
         }
         return result;

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Ember.App;
 using Ember.Core.Config;
@@ -9,32 +10,50 @@ namespace Ember.Ui;
 /// <summary>
 /// The status widget: a borderless, per-pixel transparent (layered) window on the desktop layer.
 /// It is owned by the desktop window (Progman), so it is not topmost and stays visible on "Show desktop".
-/// Clicks go through it (WS_EX_TRANSPARENT), except on top-process lines and in edit mode.
+/// Clicks go through it (WS_EX_TRANSPARENT), except on buttons/process lines and in edit mode.
+/// Size changes are animated (height eases to the new value).
 /// </summary>
 internal sealed class WidgetWindow : Win32Window
 {
     private const string ClassName = "Ember.Widget";
-    private const uint HoverTimer = 1;
-    private const float PadDip = 6;
+    private const uint HoverTimer = 1, AnimTimer = 2;
 
     private readonly TextRenderer _text = new();
     private List<Line> _lines = new();
     private string _lastKey = "";
-    private readonly List<(RECT Rect, int Pid)> _targets = new();
+    private readonly List<(RECT Rect, Hit Hit)> _hits = new();
+    private int _hover = -1;
     private bool _transparent = true;
     private bool _hoverTimer;
     private IntPtr _dc, _bitmap, _oldBitmap, _bits;
     private int _bmpW, _bmpH;
     private uint _dpi = 96;
     private POINT _pos;
-    private SIZE _size;
-    private bool _moving;
+    private SIZE _shown;          // size on screen now
+    private int _targetH, _targetW;
+    private int _animFromH;
+    private readonly Stopwatch _anim = new();
+    private bool _animating, _moving;
+    private string _accentKey = "";
+    private float _pad;
 
-    public EmberSettings Settings { get; set; } = new();
+    private EmberSettings _settings = new();
+    private string _themeKey = "";
+
+    public EmberSettings Settings
+    {
+        get => _settings;
+        set
+        {
+            _settings = value;
+            _themeKey = ThemeStore.Serialize(value.Theme);
+        }
+    }
     public bool EditMode { get; private set; }
+    public bool Hidden { get; private set; }
 
-    /// <summary>Left click on a process line (pid, screen point).</summary>
-    public event Action<int, POINT>? ProcessClicked;
+    /// <summary>A click on a button or line hit (hit, screen point).</summary>
+    public event Action<Hit, POINT>? HitClicked;
     /// <summary>Right click on a process line.</summary>
     public event Action<int, POINT>? ProcessMenu;
     /// <summary>Right click on the widget in edit mode.</summary>
@@ -60,16 +79,27 @@ internal sealed class WidgetWindow : Win32Window
     {
         if (!IsAlive) return;
         W.SetWindowLongPtr(Handle, W.GWLP_HWNDPARENT, DesktopOwner());
-        W.ShowWindow(Handle, W.SW_SHOWNOACTIVATE);
+        if (!Hidden) W.ShowWindow(Handle, W.SW_SHOWNOACTIVATE);
         W.SetWindowPos(Handle, W.HWND_BOTTOM, 0, 0, 0, 0, W.SWP_NOMOVE | W.SWP_NOSIZE | W.SWP_NOACTIVATE);
+        _accentKey = "";
         Invalidate();
     }
 
-    /// <summary>Bring to the top of the z-order once (second instance start). It falls back as other windows activate.</summary>
     public void BringToFront()
     {
         if (!IsAlive) return;
+        SetHidden(false);
         W.SetWindowPos(Handle, W.HWND_TOP, 0, 0, 0, 0, W.SWP_NOMOVE | W.SWP_NOSIZE | W.SWP_NOACTIVATE | W.SWP_SHOWWINDOW);
+    }
+
+    /// <summary>Hide (the tray icon shows it again).</summary>
+    public void SetHidden(bool hidden)
+    {
+        if (!IsAlive || hidden == Hidden) return;
+        Hidden = hidden;
+        Tooltip.HideShared();
+        W.ShowWindow(Handle, hidden ? W.SW_HIDE : W.SW_SHOWNOACTIVATE);
+        if (!hidden) Invalidate();
     }
 
     public void SetEditMode(bool on)
@@ -80,7 +110,7 @@ internal sealed class WidgetWindow : Win32Window
         Invalidate();
     }
 
-    /// <summary>Force a redraw on the next update (settings or DPI changed).</summary>
+    /// <summary>Force a redraw (settings or DPI changed).</summary>
     public void Invalidate()
     {
         _lastKey = "";
@@ -91,39 +121,113 @@ internal sealed class WidgetWindow : Win32Window
     public void Render(List<Line> lines)
     {
         if (!IsAlive) return;
+        _lines = lines;
+        if (Hidden) return;
         var mon = Monitors.Get(Settings.Layout.Monitor);
         _dpi = Monitors.Dpi(mon.Handle);
         var lay = Settings.Layout;
-        string key = string.Join("\n", lines.Select(l => l.Key)) + $"|{lay.Font}|{lay.FontSize}|{lay.Opacity}|{lay.Corner}|{lay.OffsetX}|{lay.OffsetY}|{lay.Monitor}|{_dpi}|{EditMode}|{mon.Work.Left},{mon.Work.Top},{mon.Work.Right},{mon.Work.Bottom}";
-        _lines = lines;
+        var bg = Settings.Theme.Background;
+        string key = string.Join("\n", lines.Select(l => l.Key)) +
+                     $"|{lay.Font}|{lay.FontSize}|{lay.Opacity}|{lay.Corner}|{lay.OffsetX}|{lay.OffsetY}|{lay.Monitor}|{_dpi}|{EditMode}|{_hover}" +
+                     $"|{_themeKey}|{mon.Work.Left},{mon.Work.Top},{mon.Work.Right},{mon.Work.Bottom}";
         if (key == _lastKey) return;
         _lastKey = key;
 
         _text.Configure(lay.Font, lay.FontSize, _dpi);
         float scale = _dpi / 96f;
-        float pad = PadDip * scale;
-        int w = (int)Math.Ceiling(Layout.Width * _text.CellWidth + 2 * pad);
-        int rows = Math.Max(1, lines.Count);
-        int h = (int)Math.Ceiling(rows * _text.LineHeight + 2 * pad);
+        _pad = Math.Max(2, bg.Padding * scale);
+        _targetW = (int)Math.Ceiling(Layout.Width * _text.CellWidth + 2 * _pad);
+        _targetH = (int)Math.Ceiling(Math.Max(1, lines.Count) * _text.LineHeight + 2 * _pad);
+
+        BuildHits(lines);
+        UpdateHoverTimer();
+
+        bool animate = lay.Animate && lay.AnimationMs > 0 && _shown.CY > 0 && _shown.CY != _targetH && !_moving && _shown.CX == _targetW;
+        if (animate)
+        {
+            _animFromH = _animating ? CurrentAnimHeight() : _shown.CY;
+            _anim.Restart();
+            if (!_animating)
+            {
+                _animating = true;
+                W.SetTimer(Handle, (UIntPtr)AnimTimer, 15, IntPtr.Zero);
+            }
+            DrawFrame(CurrentAnimHeight());
+        }
+        else
+        {
+            StopAnim();
+            DrawFrame(_targetH);
+        }
+    }
+
+    private int CurrentAnimHeight()
+    {
+        double t = Math.Clamp(_anim.Elapsed.TotalMilliseconds / Math.Max(1, Settings.Layout.AnimationMs), 0, 1);
+        double e = 1 - Math.Pow(1 - t, 3); // ease-out cubic
+        return (int)Math.Round(_animFromH + (_targetH - _animFromH) * e);
+    }
+
+    private void StopAnim()
+    {
+        if (!_animating) return;
+        _animating = false;
+        W.KillTimer(Handle, (UIntPtr)AnimTimer);
+    }
+
+    private void BuildHits(List<Line> lines)
+    {
+        _hits.Clear();
+        for (int i = 0; i < lines.Count; i++)
+        {
+            int top = (int)(_pad + i * _text.LineHeight);
+            foreach (var h in lines[i].Hits)
+            {
+                int left = h.Width >= Layout.Width ? 0 : (int)(_pad + h.Col * _text.CellWidth);
+                int right = h.Width >= Layout.Width ? _targetW : (int)Math.Ceiling(_pad + (h.Col + h.Width) * _text.CellWidth);
+                _hits.Add((new RECT(left, top, right, (int)Math.Ceiling(top + _text.LineHeight)), h));
+            }
+        }
+        if (_hover >= _hits.Count) _hover = -1;
+    }
+
+    /// <summary>Draws background and text at the given height and shows it.</summary>
+    private void DrawFrame(int h)
+    {
+        int w = _targetW;
+        h = Math.Max(1, h);
+        var lay = Settings.Layout;
+        var bg = Settings.Theme.Background;
+        float scale = _dpi / 96f;
 
         EnsureBitmap(w, h);
         Gdip.GdipCreateBitmapFromScan0(w, h, w * 4, Gdip.PixelFormat32bppPARGB, _bits, out var bmp);
         Gdip.GdipGetImageGraphicsContext(bmp, out var g);
         try
         {
-            // Edit mode: a dark background so the window can be seen and dragged.
-            Gdip.GdipGraphicsClear(g, EditMode ? Palette.Background.ToArgb(0xC0) : 0x00000000);
-            // Process lines: almost invisible background (alpha 3). Pixels with alpha 0 never get
-            // mouse input, so without it only the glyph pixels would be clickable.
-            if (!EditMode && lines.Any(l => l.Click == ClickKind.Process))
+            Gdip.GdipGraphicsClear(g, 0x00000000);
+            Backdrop.Paint(g, bg, w, h, scale);
+            if (EditMode) Gdip.FillRoundRect(g, Palette.Background.ToArgb(0x90), 0, 0, w, h, bg.CornerRadius * scale);
+
+            // Hit areas: almost invisible fill (alpha 3) so the whole area receives the mouse (alpha-0 pixels never do).
+            if (!EditMode && _hits.Count > 0)
             {
-                Gdip.GdipCreateSolidFill(0x03000000, out var hit);
-                for (int i = 0; i < lines.Count; i++)
-                    if (lines[i].Click == ClickKind.Process)
-                        Gdip.GdipFillRectangle(g, hit, 0, pad + i * _text.LineHeight, w, _text.LineHeight);
-                Gdip.GdipDeleteBrush(hit);
+                Gdip.GdipCreateSolidFill(0x03000000, out var hitBrush);
+                foreach (var (r, _) in _hits)
+                    if (r.Top < h) Gdip.GdipFillRectangle(g, hitBrush, r.Left, r.Top, r.Width, Math.Min(r.Height, h - r.Top));
+                Gdip.GdipDeleteBrush(hitBrush);
             }
-            _text.Draw(g, lines, pad, pad);
+            // Hovered button: soft highlight.
+            if (_hover >= 0 && _hover < _hits.Count && _hits[_hover].Hit.Width < Layout.Width)
+            {
+                var r = _hits[_hover].Rect;
+                Gdip.FillRoundRect(g, new Rgb(0xFF, 0xFF, 0xFF).ToArgb(0x28), r.Left - 1, r.Top, r.Width + 2, r.Height, 3 * scale);
+            }
+
+            Gdip.GdipSetClipRect(g, 0, 0, w, Math.Max(0, h - _pad / 2), Gdip.CombineModeReplace);
+            byte alpha = (byte)Math.Round(255 * Math.Clamp(lay.Opacity, 10, 100) / 100.0);
+            _text.Draw(g, _lines, _pad, _pad, alpha, bg.TextShadow, h);
+            Gdip.GdipResetClip(g);
         }
         finally
         {
@@ -131,28 +235,22 @@ internal sealed class WidgetWindow : Win32Window
             Gdip.GdipDisposeImage(bmp);
         }
 
-        // Click targets (window coordinates).
-        _targets.Clear();
-        for (int i = 0; i < lines.Count; i++)
-        {
-            if (lines[i].Click != ClickKind.Process) continue;
-            int top = (int)(pad + i * _text.LineHeight);
-            _targets.Add((new RECT(0, top, w, (int)(top + _text.LineHeight)), lines[i].Pid));
-        }
-        UpdateHoverTimer();
-
-        _size = new SIZE(w, h);
+        var mon = Monitors.Get(lay.Monitor);
         if (_moving && W.GetWindowRect(Handle, out var cur)) _pos = new POINT(cur.Left, cur.Top);
         else _pos = Position(mon, w, h, scale);
-        var blend = new BLENDFUNCTION
+        _shown = new SIZE(w, h);
+
+        string accentKey = $"{bg.Kind}|{bg.Color}|{bg.Opacity}|{bg.CornerRadius}|{w}x{h}|{_dpi}";
+        if (accentKey != _accentKey)
         {
-            BlendOp = W.AC_SRC_OVER,
-            SourceConstantAlpha = (byte)Math.Round(255 * Math.Clamp(lay.Opacity, 10, 100) / 100.0),
-            AlphaFormat = W.AC_SRC_ALPHA,
-        };
+            _accentKey = accentKey;
+            Backdrop.Apply(Handle, bg, w, h, scale);
+        }
+
+        var blend = new BLENDFUNCTION { BlendOp = W.AC_SRC_OVER, SourceConstantAlpha = 255, AlphaFormat = W.AC_SRC_ALPHA };
         var src = new POINT(0, 0);
         var screen = W.GetDC(IntPtr.Zero);
-        W.UpdateLayeredWindow(Handle, screen, ref _pos, ref _size, _dc, ref src, 0, ref blend, W.ULW_ALPHA);
+        W.UpdateLayeredWindow(Handle, screen, ref _pos, ref _shown, _dc, ref src, 0, ref blend, W.ULW_ALPHA);
         W.ReleaseDC(IntPtr.Zero, screen);
     }
 
@@ -222,12 +320,12 @@ internal sealed class WidgetWindow : Win32Window
     }
 
     /// <summary>
-    /// While process lines are visible, a 100 ms timer checks the cursor position and removes
-    /// WS_EX_TRANSPARENT only while the cursor is over a process line. No timer otherwise.
+    /// While buttons or process lines are visible, a 100 ms timer checks the cursor: it removes
+    /// WS_EX_TRANSPARENT only while the cursor is over a hit, highlights the hovered button and shows its tooltip.
     /// </summary>
     private void UpdateHoverTimer()
     {
-        bool need = !EditMode && _targets.Count > 0;
+        bool need = !EditMode && _hits.Count > 0 && !Hidden;
         if (need && !_hoverTimer)
         {
             W.SetTimer(Handle, (UIntPtr)HoverTimer, 100, IntPtr.Zero);
@@ -237,37 +335,71 @@ internal sealed class WidgetWindow : Win32Window
         {
             W.KillTimer(Handle, (UIntPtr)HoverTimer);
             _hoverTimer = false;
+            SetHover(-1, default);
             if (!EditMode) SetTransparent(true);
         }
     }
 
-    private int TargetAt(int x, int y)
+    /// <summary>Index of the smallest hit under the window point, or -1.</summary>
+    private int HitAt(int x, int y)
     {
-        foreach (var (rect, pid) in _targets)
-            if (rect.Contains(x, y)) return pid;
-        return 0;
+        int best = -1, bestW = int.MaxValue;
+        for (int i = 0; i < _hits.Count; i++)
+        {
+            var r = _hits[i].Rect;
+            if (r.Contains(x, y) && r.Width < bestW && y < _shown.CY)
+            {
+                best = i;
+                bestW = r.Width;
+            }
+        }
+        return best;
     }
 
-    private int TargetAtScreen(POINT p) => TargetAt(p.X - _pos.X, p.Y - _pos.Y);
+    private int HitAtScreen(POINT p) => HitAt(p.X - _pos.X, p.Y - _pos.Y);
+
+    private void SetHover(int index, POINT cursor)
+    {
+        if (index >= 0 && _hits[index].Hit.Tooltip is { Length: > 0 } tip) Tooltip.Shared.Show(tip, cursor);
+        else Tooltip.HideShared();
+        if (index == _hover) return;
+        _hover = index;
+        Invalidate();
+    }
 
     protected override IntPtr OnMessage(uint msg, IntPtr wParam, IntPtr lParam)
     {
         switch (msg)
         {
             case W.WM_TIMER when (uint)wParam == HoverTimer:
-                if (W.GetCursorPos(out var cp)) SetTransparent(TargetAtScreen(cp) == 0);
+                if (W.GetCursorPos(out var cp))
+                {
+                    int hit = HitAtScreen(cp);
+                    SetTransparent(hit < 0);
+                    SetHover(hit, cp);
+                }
                 return IntPtr.Zero;
 
+            case W.WM_TIMER when (uint)wParam == AnimTimer:
+            {
+                int h = CurrentAnimHeight();
+                if (h == _targetH || _anim.ElapsedMilliseconds >= Settings.Layout.AnimationMs) { StopAnim(); h = _targetH; }
+                DrawFrame(h);
+                return IntPtr.Zero;
+            }
+
             case W.WM_NCHITTEST:
-                if (EditMode)
-                {
-                    var p = new POINT(W.LoWord(lParam), W.HiWord(lParam));
-                    return (IntPtr)(TargetAtScreen(p) != 0 ? W.HTCLIENT : W.HTCAPTION);
-                }
+            {
+                // Edit mode: drag anywhere except on buttons. Always: drag by the top row.
+                var p = new POINT(W.LoWord(lParam), W.HiWord(lParam));
+                int i = HitAtScreen(p);
+                if (i >= 0 && _hits[i].Hit.Action == HitAction.Drag) return (IntPtr)W.HTCAPTION;
+                if (EditMode) return (IntPtr)(i >= 0 ? W.HTCLIENT : W.HTCAPTION);
                 return (IntPtr)W.HTCLIENT;
+            }
 
             case W.WM_SETCURSOR:
-                if (W.GetCursorPos(out var sp) && TargetAtScreen(sp) != 0)
+                if (W.GetCursorPos(out var sp) && HitAtScreen(sp) is var hi && hi >= 0 && _hits[hi].Hit.Action != HitAction.Drag)
                 {
                     W.SetCursor(W.LoadCursor(IntPtr.Zero, W.IDC_HAND));
                     return (IntPtr)1;
@@ -276,26 +408,35 @@ internal sealed class WidgetWindow : Win32Window
 
             case W.WM_LBUTTONUP:
             {
-                int pid = TargetAt(W.LoWord(lParam), W.HiWord(lParam));
-                if (pid != 0 && W.GetCursorPos(out var pt)) ProcessClicked?.Invoke(pid, pt);
+                int i = HitAt(W.LoWord(lParam), W.HiWord(lParam));
+                if (i >= 0 && W.GetCursorPos(out var pt))
+                {
+                    Tooltip.HideShared();
+                    HitClicked?.Invoke(_hits[i].Hit, pt);
+                }
                 return IntPtr.Zero;
             }
 
             case W.WM_RBUTTONUP:
             {
-                int pid = TargetAt(W.LoWord(lParam), W.HiWord(lParam));
+                int i = HitAt(W.LoWord(lParam), W.HiWord(lParam));
                 W.GetCursorPos(out var pt);
-                if (pid != 0) ProcessMenu?.Invoke(pid, pt);
+                Tooltip.HideShared();
+                if (i >= 0 && _hits[i].Hit.Action is HitAction.ProcessDetails or HitAction.ProcessKill or HitAction.ProcessProperties
+                    && int.TryParse(_hits[i].Hit.Arg, out int pid))
+                    ProcessMenu?.Invoke(pid, pt);
                 else if (EditMode) WidgetMenu?.Invoke(pt);
                 return IntPtr.Zero;
             }
 
             case W.WM_NCRBUTTONUP:
-                if (EditMode && W.GetCursorPos(out var np)) WidgetMenu?.Invoke(np);
+                // Right click on the top row (or anywhere in edit mode): widget menu.
+                if (W.GetCursorPos(out var np)) WidgetMenu?.Invoke(np);
                 return IntPtr.Zero;
 
             case 0x0231: // WM_ENTERSIZEMOVE
                 _moving = true;
+                StopAnim();
                 return IntPtr.Zero;
 
             case W.WM_EXITSIZEMOVE:
@@ -305,16 +446,13 @@ internal sealed class WidgetWindow : Win32Window
                 return IntPtr.Zero;
 
             case W.WM_DPICHANGED:
-                // Position and size come from the settings; just redraw for the new DPI.
-                Invalidate();
-                return IntPtr.Zero;
-
             case W.WM_DISPLAYCHANGE:
                 Invalidate();
                 return IntPtr.Zero;
 
             case W.WM_DESTROY:
                 if (_hoverTimer) W.KillTimer(Handle, (UIntPtr)HoverTimer);
+                StopAnim();
                 FreeBitmap();
                 _text.Dispose();
                 return IntPtr.Zero;

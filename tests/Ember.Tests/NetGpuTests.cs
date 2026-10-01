@@ -158,15 +158,24 @@ public class GpuTests
     }
 
     [Theory]
-    [InlineData("NVIDIA GeForce RTX 4080", false, "rtx")]
-    [InlineData("NVIDIA GeForce GTX 1660", false, "gtx")]
-    [InlineData("AMD Radeon RX 7900 XTX", false, "rx")]
-    [InlineData("Intel(R) Arc(TM) A770", false, "arc")]
-    [InlineData("Intel(R) UHD Graphics 770", true, "igp")]
-    [InlineData("AMD Radeon(TM) Graphics", true, "igp")]
+    [InlineData("NVIDIA GeForce RTX 4080", false, "4080")]
+    [InlineData("NVIDIA GeForce GTX 1660", false, "1660")]
+    [InlineData("AMD Radeon RX 7900 XTX", false, "7900")]
+    [InlineData("Intel(R) Arc(TM) A770", false, "A770")]
+    [InlineData("Intel(R) UHD Graphics 770", true, "770")]
+    [InlineData("AMD Radeon(TM) Graphics", true, "igpu")]
+    [InlineData("AMD Radeon 780M Graphics", true, "780M")]
+    [InlineData("NVIDIA GeForce RTX 4060 Ti", false, "4060")]
     [InlineData("Some GPU", false, "gpu")]
-    public void ShortLabel(string name, bool integrated, string expected)
+    public void ShortLabel_ShowsModel(string name, bool integrated, string expected)
         => Assert.Equal(expected, GpuNames.ShortLabel(name, integrated));
+
+    [Fact]
+    public void Labels_DuplicatesNumbered()
+    {
+        var l = GpuNames.Labels(new[] { ("NVIDIA GeForce RTX 4090", false), ("NVIDIA GeForce RTX 4090", false), ("Intel UHD 770", true) });
+        Assert.Equal(new[] { "4091", "4092", "770" }, l);
+    }
 
     [Fact]
     public void Integrated_ByDedicatedMemory()

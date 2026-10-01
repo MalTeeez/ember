@@ -93,8 +93,8 @@ internal sealed partial class Sampler : IDisposable
         bool pdhOk = _pdh.Collect();
         if (!pdhOk) Log.SourceFailed("pdh.collect"); else Log.SourceOk("pdh.collect");
 
-        bool cpuTemp = cfg.Items.CpuTemp;
-        bool gpuTemp = cfg.Items.GpuTemp && AnyGpuItem(cfg);
+        bool cpuTemp = cfg.PreviewAll || (cfg.Fields.CpuTemp && cfg.IsOn("cpu.load")) || (cfg.Fields.CoreDetails && cfg.IsOn("cpu.cores"));
+        bool gpuTemp = cfg.Fields.GpuTemp && AnyGpuItem(cfg);
         _temps.Update(cpuTemp, gpuTemp);
 
         var cpu = pdhOk ? ReadCpu(cfg) : null;
@@ -102,7 +102,7 @@ internal sealed partial class Sampler : IDisposable
 
         // Process scan only when a top-process line needs it.
         bool scan = needs.TopCpu || needs.TopMem || needs.TopDisk;
-        ProcInfo? topCpu = null, topMem = null, topDisk = null;
+        List<ProcInfo>? topCpu = null, topMem = null, topDisk = null;
         if (scan)
         {
             if (_procs.Sample(now))
@@ -121,11 +121,11 @@ internal sealed partial class Sampler : IDisposable
         {
             Time = now,
             Cpu = cpu,
-            Net = cfg.Items.Network ? ReadNet(cfg, now) : null,
+            Net = cfg.IsOn("net.down") || cfg.IsOn("net.up") || cfg.IsOn("net.adapters") ? ReadNet(cfg, now) : null,
             Gpus = gpus,
             Mem = ReadMemory(cfg, pdhOk),
             Disks = pdhOk ? ReadDisks(cfg) : null,
-            Volumes = cfg.Items.DiskFree ? ReadVolumes() : null,
+            Volumes = cfg.IsOn("disk.free") ? ReadVolumes() : null,
             TopCpu = topCpu,
             TopMem = topMem,
             TopDisk = topDisk,
@@ -141,33 +141,60 @@ internal sealed partial class Sampler : IDisposable
 
     // ───────── CPU ─────────
 
-    private PdhQuery.PdhCounter? _cpuTotal, _cpuCores, _cpuPerf;
-    private Dictionary<(int, int), int> _effClass = new();
+    private PdhQuery.PdhCounter? _cpuTotal, _cpuCores, _cpuPerf, _corePerf, _coreFreq;
+    private Dictionary<(int, int), (int Efficiency, int Core)> _cpuSets = new();
 
     private void InitCpu()
     {
         _cpuTotal = _pdh.Add(@"\Processor Information(_Total)\% Processor Utility");
         _cpuCores = _pdh.Add(@"\Processor Information(*)\% Processor Utility");
         _cpuPerf = _pdh.Add(@"\Processor Information(_Total)\% Processor Performance");
+        // Effective clock = base frequency × % Processor Performance (also per logical core).
+        _corePerf = _pdh.Add(@"\Processor Information(*)\% Processor Performance");
+        _coreFreq = _pdh.Add(@"\Processor Information(*)\Processor Frequency");
         if (_cpuTotal == null) Log.SourceFailed("pdh.cpu");
-        _effClass = SysInfo.CpuEfficiencyClasses();
-        if (_effClass.Values.Distinct().Count() > 1) Log.Write("hybrid CPU: " + _effClass.Values.Distinct().Count() + " core types");
+        _cpuSets = SysInfo.CpuSets();
+        if (_cpuSets.Values.Select(v => v.Efficiency).Distinct().Count() > 1) Log.Write("hybrid CPU: " + _cpuSets.Values.Select(v => v.Efficiency).Distinct().Count() + " core types");
+    }
+
+    private static List<(int Group, int Number, double Value)> PerCore(List<(string Instance, double Value)>? arr)
+    {
+        var list = new List<(int Group, int Number, double Value)>();
+        if (arr == null) return list;
+        foreach (var (inst, v) in arr)
+            if (CpuNames.Parse(inst) is { } gn) list.Add((gn.Group, gn.Number, v));
+        list.Sort((a, b) => a.Group != b.Group ? a.Group.CompareTo(b.Group) : a.Number.CompareTo(b.Number));
+        return list;
     }
 
     private CpuData? ReadCpu(EmberSettings cfg)
     {
         if (_cpuTotal?.Value() is not { } load) return null;
-        double[]? cores = null;
+        double[]? cores = null, clocks = null, temps = null;
         int[]? groups = null;
-        if (cfg.Items.CpuCores && _cpuCores?.Array() is { } arr)
+        bool wantCores = cfg.IsOn("cpu.cores") || cfg.IsOn("cpu.top") || cfg.PreviewAll;
+        var perfAll = _corePerf?.Array();
+        var freqAll = _coreFreq?.Array();
+        double? clock = null;
+        if (perfAll != null && freqAll != null)
         {
-            var list = new List<(int Group, int Number, double Value)>();
-            foreach (var (inst, v) in arr)
-                if (CpuNames.Parse(inst) is { } gn) list.Add((gn.Group, gn.Number, v));
-            list.Sort((a, b) => a.Group != b.Group ? a.Group.CompareTo(b.Group) : a.Number.CompareTo(b.Number));
+            var perfTotal = perfAll.FirstOrDefault(x => x.Instance == "_Total");
+            var freqTotal = freqAll.FirstOrDefault(x => x.Instance == "_Total");
+            if (perfTotal.Instance != null && freqTotal.Instance != null && freqTotal.Value > 0) clock = freqTotal.Value * perfTotal.Value / 100;
+        }
+        if (wantCores && _cpuCores?.Array() is { } arr)
+        {
+            var list = PerCore(arr);
             cores = list.Select(x => x.Value).ToArray();
-            bool hybrid = _effClass.Values.Distinct().Count() > 1;
-            groups = hybrid ? list.Select(x => _effClass.GetValueOrDefault((x.Group, x.Number))).ToArray() : null;
+            bool hybrid = _cpuSets.Values.Select(v => v.Efficiency).Distinct().Count() > 1;
+            groups = hybrid ? list.Select(x => _cpuSets.GetValueOrDefault((x.Group, x.Number)).Efficiency).ToArray() : null;
+            if (cfg.Fields.CoreDetails || cfg.PreviewAll)
+            {
+                var perf = PerCore(perfAll).ToDictionary(x => (x.Group, x.Number), x => x.Value);
+                var freq = PerCore(freqAll).ToDictionary(x => (x.Group, x.Number), x => x.Value);
+                clocks = list.Select(x => freq.TryGetValue((x.Group, x.Number), out var f) && perf.TryGetValue((x.Group, x.Number), out var pf) ? f * pf / 100 : 0).ToArray();
+                temps = CoreTemps(list);
+            }
         }
         return new CpuData
         {
@@ -175,8 +202,39 @@ internal sealed partial class Sampler : IDisposable
             CoreLoads = cores,
             CoreGroups = groups,
             Temp = _temps.CpuPackage,
-            Perf = cfg.Items.CpuThrottle ? _cpuPerf?.Value() : null,
+            Perf = cfg.IsOn("cpu.throttle") || cfg.PreviewAll ? _cpuPerf?.Value() : null,
+            ClockMHz = clock,
+            CoreClocksMHz = clocks,
+            CoreTemps = temps,
         };
+    }
+
+    /// <summary>
+    /// Temperature of each logical core: LHM gives one per physical core ("CPU Core #n", or "P-Core #n"
+    /// then "E-Core #n"). Physical cores are ordered by their CPU-set core index (P-cores first on Intel hybrid).
+    /// Unknown → NaN (for example AMD, where LHM has no per-core temperature).
+    /// </summary>
+    private double[]? CoreTemps(List<(int Group, int Number, double Value)> logical)
+    {
+        var lhm = _temps.CoreTemps;
+        if (lhm.Count == 0) return null;
+        var ordered = lhm.Where(t => t.Name.StartsWith("CPU Core", StringComparison.Ordinal)).ToList();
+        if (ordered.Count == 0)
+            ordered = lhm.Where(t => t.Name.StartsWith("P-", StringComparison.Ordinal)).Concat(lhm.Where(t => t.Name.StartsWith("E-", StringComparison.Ordinal))).ToList();
+        ordered = ordered.OrderBy(t => t.Name.StartsWith("E-", StringComparison.Ordinal) ? 1 : 0).ThenBy(t => CoreNumber(t.Name)).ToList();
+        var physical = logical.Select(x => _cpuSets.TryGetValue((x.Group, x.Number), out var cs) ? cs.Core : -1).ToArray();
+        var order = physical.Where(c => c >= 0).Distinct().OrderBy(c => c).ToList();
+        return physical.Select(c =>
+        {
+            int k = order.IndexOf(c);
+            return k >= 0 && k < ordered.Count ? ordered[k].Celsius : double.NaN;
+        }).ToArray();
+    }
+
+    private static int CoreNumber(string name)
+    {
+        int i = name.LastIndexOf('#');
+        return i >= 0 && int.TryParse(name[(i + 1)..], out int n) ? n : 0;
     }
 
     // ───────── Network ─────────
