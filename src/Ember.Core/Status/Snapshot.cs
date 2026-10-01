@@ -6,6 +6,9 @@ namespace Ember.Core.Status;
 /// <summary>A process for a "└ top process" line.</summary>
 public sealed record ProcInfo(int Pid, string Name, double Value, string ValueText);
 
+/// <summary>A process with hard page faults: private bytes and hard faults per second.</summary>
+public sealed record FaultProc(int Pid, string Name, double PrivateBytes, double HardFaultsPerSec);
+
 public sealed class CpuData
 {
     /// <summary>Combined load, % (may be above 100 with turbo; display is limited to 100).</summary>
@@ -66,6 +69,10 @@ public sealed class Snapshot
     /// <summary>Top processes, highest first (a few, so the shown one can stay).</summary>
     public IReadOnlyList<ProcInfo>? TopCpu { get; set; }
     public IReadOnlyList<ProcInfo>? TopMem { get; set; }
+    /// <summary>Processes with hard page faults, most first.</summary>
+    public IReadOnlyList<FaultProc>? FaultProcs { get; set; }
+    /// <summary>Hard page faults per second of all processes.</summary>
+    public double FaultsTotal { get; set; }
     public IReadOnlyList<ProcInfo>? TopDisk { get; set; }
     public IReadOnlyList<ClaudeLine>? Claude { get; set; }
     public IReadOnlyList<ClaudeLine>? Codex { get; set; }
@@ -80,4 +87,6 @@ public sealed class Needs
     public bool TopCpu { get; set; }
     public bool TopMem { get; set; }
     public bool TopDisk { get; set; }
+    /// <summary>The per-process hard page fault list is shown or about to show.</summary>
+    public bool Faults { get; set; }
 }

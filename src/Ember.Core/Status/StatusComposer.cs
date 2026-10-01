@@ -563,10 +563,12 @@ public sealed class StatusComposer
     private void ComposeMemory(Snapshot s, Dictionary<string, List<Line>> items)
     {
         Needs.TopMem = false;
+        Needs.Faults = false;
         if (s.Mem is not { } m) return;
         var t = _cfg.Thresholds;
         bool any = false, pending = false;
 
+        // RAM: shown when little is available; the line shows the used part (easier to read with a bar).
         double availPct = m.TotalBytes > 0 ? 100.0 * m.AvailBytes / m.TotalBytes : double.NaN;
         if (On("mem.avail"))
         {
@@ -575,9 +577,7 @@ public sealed class StatusComposer
             {
                 any = true;
                 var c = _c.Severity(availPct, t.AvailableRam.Warn, t.AvailableRam.Crit);
-                var b = Label("ram", _c.Memory);
-                Val(b, Format.Bytes4(m.AvailBytes), c).Add(" available", _c.Unit).Right(new Run(Format.Pct4(availPct), c, ValueStyle));
-                items["mem.avail"] = new() { b.Build() };
+                items["mem.avail"] = new() { AmountLine("used", m.TotalBytes - m.AvailBytes, m.TotalBytes, c) };
             }
             pending |= cond || _vis.IsPending("mem.avail");
         }
@@ -590,31 +590,32 @@ public sealed class StatusComposer
             {
                 any = true;
                 var c = _c.Severity(commitPct, t.Commit.Warn, t.Commit.Crit);
-                // "ram   35G of 40G committed  87%" — commit charge and its limit (RAM + page file).
-                var b = Label("ram", _c.Memory);
-                Val(b, Format.Bytes4(m.CommitBytes), c).Add(" of " + Format.Bytes4(m.CommitLimitBytes).Trim() + " committed", _c.Unit)
-                    .Right(new Run(Format.Pct4(commitPct), c, ValueStyle));
-                items["mem.commit"] = new() { b.Build() };
+                items["mem.commit"] = new() { AmountLine("commit", m.CommitBytes, m.CommitLimitBytes, c) };
             }
             pending |= cond || _vis.IsPending("mem.commit");
         }
 
         if (On("mem.pagein") && m.PagesInPerSec is { } pf)
         {
-            // "ram  disk paging ⣀⣠⣴⣶⣿  983/s" — pages read from disk (hard page faults) per second.
+            // "disk paging ⣀⣠⣴⣶⣿⣿⣿⣿⣿⣿  983/s" — pages read from disk (hard page faults) per second,
+            // then the processes that cause them.
             var h = Hist("mem.pf");
             h.Add(Math.Max(0, pf));
             bool cond = t.PageFaults.Crossed(pf);
-            if (Vis("mem.pf", cond))
+            bool vis = Vis("mem.pf", cond);
+            Needs.Faults = cond || vis || _vis.IsPending("mem.pf") || _preview;
+            if (vis)
             {
                 any = true;
-                var b = Label("ram", _c.Memory);
-                b.Add("disk paging", _c.Unit);
+                var b = new LineBuilder();
+                b.Add("disk paging", _c.Memory);
                 string value = Format.Count4(pf) + "/s";
                 Graph(b, h.Values, Math.Max(h.Max, t.PageFaults.Crit), _c.Memory, b.Column + 1, Layout.Width - value.Length - 1 - b.Column - 1);
                 b.Add(" ", _c.Dim);
                 Val(b, value, _c.Severity(pf, t.PageFaults.Warn, t.PageFaults.Crit));
-                items["mem.pagein"] = new() { b.Build() };
+                var lines = new List<Line> { b.Build() };
+                lines.AddRange(FaultLines(s.FaultProcs, s.FaultsTotal, m.TotalBytes));
+                items["mem.pagein"] = lines;
             }
             pending |= cond || _vis.IsPending("mem.pf");
         }
@@ -624,6 +625,64 @@ public sealed class StatusComposer
             Needs.TopMem = any || pending || _preview;
             var p = Sticky("mem", any ? s.TopMem : null);
             if (any && p != null) items["mem.top"] = new() { ProcessLine(p) };
+        }
+    }
+
+    /// <summary>"commit  35GB / 40GB ▮▮▮▮▮▯  87%" — name, amount of total, bar, percent.</summary>
+    private Line AmountLine(string name, double amount, double total, Rgb color)
+    {
+        var b = new LineBuilder();
+        b.Add(name, _c.Memory).PadTo(7);
+        return AmountRest(b, amount, total, color);
+    }
+
+    /// <summary>"35GB / 40GB ▮▮▮▮▮▯  87%" after a name: amount, total, bar to the right edge, percent.</summary>
+    private Line AmountRest(LineBuilder b, double amount, double total, Rgb color, double? percent = null)
+    {
+        double pct = percent ?? (total > 0 ? 100 * amount / total : 0);
+        Val(b, Format.BytesB(amount), color);
+        b.Add(" / " + Format.BytesB(total).Trim(), _c.Unit).Add(" ", _c.Dim);
+        int barWidth = Layout.Width - b.Column - 1 - Layout.FieldWidth;
+        var (bar, filled) = Glyphs.StyledBar(pct / 100, Math.Max(1, barWidth), _c.Theme.BarStyle);
+        for (int i = 0; i < bar.Length; i++) b.Add(bar[i].ToString(), i < filled ? color : _c.Dim, RunStyle.None, BarBack);
+        b.Add(" ", _c.Dim);
+        Val(b, Format.Pct4(pct), color);
+        return b.Build();
+    }
+
+    private const int MaxFaultLines = 5;
+
+    /// <summary>
+    /// " └ chrome.exe      1.4GB  320/s" — each process with hard page faults: private memory (colour =
+    /// its share of the RAM) and hard faults per second (colour = its share of all hard faults).
+    /// Click = details, right-click = process menu.
+    /// </summary>
+    private IEnumerable<Line> FaultLines(IReadOnlyList<FaultProc>? procs, double total, double ram)
+    {
+        if (procs is not { Count: > 0 }) yield break;
+        double sum = Math.Max(total, procs.Sum(p => p.HardFaultsPerSec));
+        foreach (var p in procs.Take(MaxFaultLines))
+        {
+            string pid = p.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var b = new LineBuilder();
+            b.LineHit(HitAction.ProcessDetails, pid, $"{p.Name} (PID {pid}): {Format.Count4(p.HardFaultsPerSec).Trim()} hard page faults/s");
+            string faults = Format.Count4(p.HardFaultsPerSec) + "/s";
+            int nameWidth = Layout.Width - 3 - 1 - 5 - 1 - faults.Length;
+            b.Add(" └ ", _c.Dim).Add(Format.Fit(p.Name, nameWidth), _c.Process).PadTo(3 + nameWidth + 1);
+            // Memory: full colour at a quarter of the RAM.
+            double memShare = ram > 0 ? Math.Min(1, 4 * p.PrivateBytes / ram) : 0;
+            Val(b, Format.BytesB(p.PrivateBytes), Rgb.Stops(_c.GraphStops, memShare));
+            b.Add(" ", _c.Dim);
+            Val(b, faults, Rgb.Stops(_c.GraphStops, sum > 0 ? p.HardFaultsPerSec / sum : 0));
+            var line = b.Build();
+            if (_c.Theme.ProcessBand) line.Back = _c.Band(_c.Process, 22);
+            yield return line;
+        }
+        if (procs.Count > MaxFaultLines)
+        {
+            var b = new LineBuilder();
+            b.Add("   ", _c.Dim).Add($"{procs.Count - MaxFaultLines} more with hard faults", _c.Unit);
+            yield return b.Build();
         }
     }
 
@@ -637,7 +696,7 @@ public sealed class StatusComposer
 
         if (On("disk.busy") && s.Disks != null)
         {
-            // "C:   busy ⣀⣠⣴⣶⣿⣿  98% queue 3.0" — drive letter(s), busy time with graph, queue length.
+            // "C:  busy ⣀⣠⣴⣶⣿  98% 3.0 queued" — drive letter(s), busy time with graph, I/O requests waiting.
             var names = s.Disks.Select(d => Util.DiskNames.Display(d.Label, d.Volumes)).ToList();
             int nameW = Math.Clamp(names.Max(n => n.Length) + 1, 4, 8);
             var lines = new List<Line>();
@@ -655,11 +714,13 @@ public sealed class StatusComposer
                 var b = new LineBuilder();
                 b.Add(names[i], _c.Disk).PadTo(nameW);
                 b.Add("busy", _c.Unit);
-                const int right = 4 + 6 + 4; // load, " queue", queue value
+                const int right = 1 + 4 + 1 + 4 + 7; // load, queue value, " queued"
                 Graph(b, h.Values, 100, _c.Disk, b.Column + 1, Layout.Width - right - b.Column - 1);
+                b.Add(" ", _c.Dim);
                 Val(b, Format.Pct4(d.ActivePercent), _c.Severity(d.ActivePercent, t.DiskActive.Warn, t.DiskActive.Crit));
-                b.Add(" queue", _c.Unit);
+                b.Add(" ", _c.Dim);
                 Val(b, Format.Num4(d.Queue), _c.Severity(d.Queue, t.DiskQueue.Warn, t.DiskQueue.Crit));
+                b.Add(" queued", _c.Unit);
                 lines.Add(b.Build());
             }
             items["disk.busy"] = lines;
@@ -678,9 +739,10 @@ public sealed class StatusComposer
                 if (!Vis("vol." + v.Root, cond)) continue;
                 double sev = Math.Max(Gradient.Severity(pct, t.FreeSpacePercent.Warn, t.FreeSpacePercent.Crit), lowGb ? 1 : 0);
                 var c = _c.SeverityOf(sev);
-                var b = Label(v.Root.TrimEnd('\\'), _c.Disk);
-                Val(b, Format.Bytes4(v.FreeBytes), c).Add(" free", _c.Unit).Right(new Run(Format.Pct4(pct), c, ValueStyle));
-                lines.Add(b.Build());
+                // "C:  free  14GB / 500GB ▮▯▯  3%" — free space of total, bar and percent free.
+                var b = new LineBuilder();
+                b.Add(v.Root.TrimEnd('\\'), _c.Disk).PadTo(4).Add("free ", _c.Unit);
+                lines.Add(AmountRest(b, v.FreeBytes, v.TotalBytes, c));
             }
             items["disk.free"] = lines;
         }

@@ -46,6 +46,9 @@ public static class Format
     /// <summary>Clock from MHz: "4.8G", "800M".</summary>
     public static string Clock4(double mhz) => Scaled4(mhz, 1000, "MG");
 
+    /// <summary>Bytes with "B": "3.1GB", "512MB", " 35GB" (5 characters, base 1024).</summary>
+    public static string BytesB(double bytes) => (Bytes4(bytes).Trim() + "B").PadLeft(5);
+
     /// <summary>Clock with its unit in 6 characters: "4.8GHz", "800MHz".</summary>
     public static string Hz6(double mhz) => (Clock4(mhz).Trim() + "Hz").PadLeft(6);
 

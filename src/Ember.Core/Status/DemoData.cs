@@ -57,6 +57,16 @@ public static class DemoData
         s.Volumes ??= new List<VolumeData> { new("C:\\", 14.0 * (1 << 30), 500.0 * (1 << 30)) };
 
         s.TopCpu ??= top;
+        if (s.FaultProcs is not { Count: > 0 })
+        {
+            s.FaultProcs = new List<FaultProc>
+            {
+                new(4242, "chrome.exe", 1.4 * (1L << 30), Wave(13, 200, 700)),
+                new(5150, "code.exe", 0.9 * (1L << 30), Wave(17, 40, 200)),
+                new(6060, "MsMpEng.exe", 0.3 * (1L << 30), Wave(11, 5, 60)),
+            };
+            s.FaultsTotal = s.FaultProcs.Sum(f => f.HardFaultsPerSec);
+        }
         s.TopMem ??= Procs(s.Time, "chrome.exe", "code.exe", "teams.exe", v => Math.Round(v / 10, 1) + "G", 10, 40);
         s.TopDisk ??= Procs(s.Time, "MsMpEng.exe", "onedrive.exe", "steam.exe", v => Math.Round(v) + "M/s", 5, 120);
 

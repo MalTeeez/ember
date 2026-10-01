@@ -4,7 +4,7 @@ using Ember.Core.Net;
 namespace Ember.Native;
 
 /// <summary>One process from NtQuerySystemInformation(SystemProcessInformation).</summary>
-internal readonly record struct ProcSample(int Pid, int ParentPid, string Name, long CreateTime, long CpuTime, ulong PrivateBytes, ulong IoBytes);
+internal readonly record struct ProcSample(int Pid, int ParentPid, string Name, long CreateTime, long CpuTime, ulong PrivateBytes, ulong IoBytes, uint HardFaults = 0);
 
 internal static class SysInfo
 {
@@ -43,6 +43,7 @@ internal static class SysInfo
             {
                 IntPtr p = _procBuf + offset;
                 int next = Marshal.ReadInt32(p);
+                uint hardFaults = (uint)Marshal.ReadInt32(p + 16); // HardFaultCount (Windows 7 and later)
                 long create = Marshal.ReadInt64(p + 32);
                 long user = Marshal.ReadInt64(p + 40);
                 long kernel = Marshal.ReadInt64(p + 48);
@@ -54,7 +55,7 @@ internal static class SysInfo
                 ulong read = (ulong)Marshal.ReadInt64(p + 232);
                 ulong write = (ulong)Marshal.ReadInt64(p + 240);
                 string name = pid == 0 ? "Idle" : nameBuf == IntPtr.Zero ? "System" : Marshal.PtrToStringUni(nameBuf, nameLen / 2);
-                list.Add(new ProcSample(pid, ppid, name, create, user + kernel, priv, read + write));
+                list.Add(new ProcSample(pid, ppid, name, create, user + kernel, priv, read + write, hardFaults));
                 if (next == 0) break;
                 offset += next;
             }

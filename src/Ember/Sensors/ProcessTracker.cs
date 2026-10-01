@@ -81,6 +81,22 @@ internal sealed class ProcessTracker
         return Top(list, v => Format.Bytes4(v).Trim() + "/s");
     }
 
+    /// <summary>Processes with hard page faults since the last sample (at least 1/s), most first, and the total of all.</summary>
+    public (List<FaultProc>? List, double Total) HardFaults()
+    {
+        if (!_hasPrev) return (null, 0);
+        var list = new List<FaultProc>();
+        double total = 0;
+        foreach (var (key, p) in _cur)
+        {
+            if (!_prev.TryGetValue(key, out var old) || p.HardFaults < old.HardFaults) continue;
+            double rate = (p.HardFaults - old.HardFaults) / Seconds;
+            total += rate;
+            if (rate >= 1 && p.Pid > 0) list.Add(new FaultProc(p.Pid, p.Name, p.PrivateBytes, rate));
+        }
+        return (list.OrderByDescending(f => f.HardFaultsPerSec).ToList(), total);
+    }
+
     private static List<ProcInfo>? Top(List<(ProcSample P, double V)> list, Func<double, string> fmt)
     {
         if (list.Count == 0) return null;

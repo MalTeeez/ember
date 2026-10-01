@@ -203,8 +203,9 @@ public class ComposerTests
         int h = lines.FindIndex(l => l.Text.StartsWith("\u2500\u2500 memory \u2500"));
         Assert.True(h > 0);
         Assert.Equal("", lines[h - 1].Text.Trim());
-        Assert.StartsWith("ram  512M available", lines[h + 1].Text);
-        Assert.EndsWith("  3%", lines[h + 1].Text);
+        // No "ram" label inside the memory section: used / total, bar, percent used.
+        Assert.StartsWith("used    16GB / 16GB ", lines[h + 1].Text);
+        Assert.EndsWith(" 97%", lines[h + 1].Text);
     }
 
     [Fact]

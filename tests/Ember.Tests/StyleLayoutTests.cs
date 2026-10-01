@@ -562,7 +562,7 @@ public class DiskMemoryLineTests
             lines = c.Compose(new Snapshot { Time = T0.AddSeconds(i), Disks = new() { new("d1", "C:", 100, 3) } }, cfg);
         var l = lines.Single(x => x.Text.StartsWith("C:"));
         Assert.StartsWith("C:  busy ", l.Text);
-        Assert.EndsWith("100% queue 3.0", l.Text);
+        Assert.EndsWith(" 100%  3.0 queued", l.Text); // queued = I/O requests waiting
         Assert.Contains(l.Text[9], "⠀⣿".ToCharArray().Concat(Enumerable.Range(0x2800, 256).Select(x => (char)x)));
         Assert.Equal(Layout.Width, l.Length);
     }
@@ -578,7 +578,39 @@ public class DiskMemoryLineTests
         for (int i = 0; i <= 6; i++)
             lines = c.Compose(new Snapshot { Time = T0.AddSeconds(i), Mem = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = G, CommitLimitBytes = 32 * G, PagesInPerSec = 6000 } }, cfg);
         var l = lines.Single(x => x.Text.Contains("disk paging"));
-        Assert.StartsWith("ram  disk paging ", l.Text);
+        Assert.StartsWith("disk paging ", l.Text);
         Assert.EndsWith("6.0k/s", l.Text);
+    }
+}
+
+public class FaultLineTests
+{
+    [Fact]
+    public void FaultProcesses_ListedUnderPaging_WithColours()
+    {
+        var cfg = new EmberSettings();
+        cfg.Layout.HoldSeconds = 0;
+        var c = new StatusComposer();
+        const ulong G = 1024UL * 1024 * 1024;
+        var procs = new List<FaultProc> { new(10, "chrome.exe", 4.0 * G, 900), new(11, "code.exe", 0.2 * G, 100) };
+        List<Ember.Core.Render.Line> lines = new();
+        for (int i = 0; i <= 6; i++)
+            lines = c.Compose(new Snapshot
+            {
+                Time = new DateTime(2026, 10, 1, 12, 0, i),
+                Mem = new MemData { AvailBytes = 8 * G, TotalBytes = 16 * G, CommitBytes = G, CommitLimitBytes = 32 * G, PagesInPerSec = 6000 },
+                FaultProcs = procs, FaultsTotal = 1000,
+            }, cfg);
+        Assert.True(c.Needs.Faults);
+        int k = lines.FindIndex(l => l.Text.StartsWith("disk paging"));
+        var first = lines[k + 1];
+        Assert.StartsWith(" └ chrome.exe", first.Text);
+        Assert.EndsWith(" 4.0GB  900/s", first.Text);
+        Assert.Equal(10, first.Pid);
+        // chrome: a quarter of the RAM and 90 % of the faults → top colour; code.exe lower.
+        var top = Rgb.Parse(cfg.Theme.GraphStops[^1], Palette.Red);
+        Assert.Contains(first.Runs, r => r.Text.Contains("900/s") && r.Color == Rgb.Stops(ThemeColors.From(cfg.Theme).GraphStops, 0.9));
+        Assert.Contains(first.Runs, r => r.Text.Contains("4.0GB") && r.Color == top);
+        Assert.StartsWith(" └ code.exe", lines[k + 2].Text);
     }
 }
