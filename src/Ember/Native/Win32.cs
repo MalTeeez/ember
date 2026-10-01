@@ -115,7 +115,8 @@ internal struct MINMAXINFO { public POINT Reserved, MaxSize, MaxPosition, MinTra
 [StructLayout(LayoutKind.Sequential)]
 internal struct NMHDR { public IntPtr hwndFrom; public UIntPtr idFrom; public int code; }
 
-[StructLayout(LayoutKind.Sequential)]
+// richedit.h is packed with pshpack4: on x64 wParam is at offset 28, lParam at 36.
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
 internal struct MSGFILTER { public NMHDR nmhdr; public uint msg; public IntPtr wParam, lParam; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -138,7 +139,7 @@ internal struct CHARFORMAT2
     public byte bUnderlineType, bAnimation, bRevAuthor, bUnderlineColor;
 }
 
-[StructLayout(LayoutKind.Sequential)]
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
 internal struct GETTEXTEX { public uint cb, flags, codepage; public IntPtr lpDefaultChar, lpUsedDefChar; }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -326,6 +327,8 @@ internal static class W
     [DllImport("user32.dll")] public static extern bool AdjustWindowRectExForDpi(ref RECT rect, uint style, bool menu, uint exStyle, uint dpi);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr hwnd, int id);
     [DllImport("user32.dll")] public static extern IntPtr SetCapture(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern bool ChangeWindowMessageFilterEx(IntPtr hwnd, uint msg, uint action, IntPtr info);
+    public const uint MSGFLT_ALLOW = 1;
     [DllImport("user32.dll")] public static extern bool ReleaseCapture();
 
     // gdi32

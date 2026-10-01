@@ -14,7 +14,10 @@ internal static class Program
         catch (EntryPointNotFoundException) { }
 
         // Single instance: a second start only brings the existing instance to the front.
-        using var mutex = new Mutex(true, @"Local\Ember.SingleInstance", out bool first);
+        Mutex? mutex = null;
+        bool first;
+        try { mutex = new Mutex(true, @"Local\Ember.SingleInstance", out first); }
+        catch (UnauthorizedAccessException) { first = false; } // the running instance is elevated
         if (!first)
         {
             var other = W.FindWindow(AppHost.HostClass, null);
@@ -42,6 +45,7 @@ internal static class Program
             if (TextRenderer.GdipToken != IntPtr.Zero) Gdip.GdiplusShutdown(TextRenderer.GdipToken);
         }
         GC.KeepAlive(mutex);
+        mutex?.Dispose();
         return 0;
     }
 }

@@ -44,6 +44,10 @@ internal sealed partial class AppHost : Win32Window, IDisposable
     {
         RegisterClass(HostClass, IntPtr.Zero, IntPtr.Zero);
         CreateHandle(HostClass, "Ember", W.WS_EX_TOOLWINDOW, W.WS_POPUP, 0, 0, 0, 0, IntPtr.Zero);
+        // Ember runs elevated (scheduled task, highest privileges). Allow these messages from
+        // Explorer and from a non-elevated second instance through UIPI.
+        W.ChangeWindowMessageFilterEx(Handle, TaskbarCreated, W.MSGFLT_ALLOW, IntPtr.Zero);
+        W.ChangeWindowMessageFilterEx(Handle, ActivateMessage, W.MSGFLT_ALLOW, IntPtr.Zero);
 
         _widget.Settings = _settings;
         _widget.Create();
@@ -168,12 +172,10 @@ internal sealed partial class AppHost : Win32Window, IDisposable
             case WM_TRAY:
             {
                 uint ev = (uint)((long)lParam & 0xFFFF);
-                if (ev is W.WM_CONTEXTMENU or W.NIN_SELECT or W.NIN_KEYSELECT or W.WM_RBUTTONUP or W.WM_LBUTTONUP)
-                {
-                    var pt = new POINT(W.LoWord(wParam), W.HiWord(wParam));
-                    if (ev is W.WM_RBUTTONUP or W.WM_LBUTTONUP) W.GetCursorPos(out pt);
-                    ShowTrayMenu(pt);
-                }
+                // NOTIFYICON_VERSION_4: event in LOWORD(lParam), anchor point in wParam.
+                // (WM_RBUTTONUP/WM_LBUTTONUP also arrive; handling them too would open the menu twice.)
+                if (ev is W.WM_CONTEXTMENU or W.NIN_SELECT or W.NIN_KEYSELECT)
+                    ShowTrayMenu(new POINT(W.LoWord(wParam), W.HiWord(wParam)));
                 return IntPtr.Zero;
             }
 

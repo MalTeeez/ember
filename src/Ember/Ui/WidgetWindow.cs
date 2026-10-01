@@ -113,6 +113,16 @@ internal sealed class WidgetWindow : Win32Window
         {
             // Edit mode: a dark background so the window can be seen and dragged.
             Gdip.GdipGraphicsClear(g, EditMode ? Palette.Background.ToArgb(0xC0) : 0x00000000);
+            // Process lines: almost invisible background (alpha 3). Pixels with alpha 0 never get
+            // mouse input, so without it only the glyph pixels would be clickable.
+            if (!EditMode && lines.Any(l => l.Click == ClickKind.Process))
+            {
+                Gdip.GdipCreateSolidFill(0x03000000, out var hit);
+                for (int i = 0; i < lines.Count; i++)
+                    if (lines[i].Click == ClickKind.Process)
+                        Gdip.GdipFillRectangle(g, hit, 0, pad + i * _text.LineHeight, w, _text.LineHeight);
+                Gdip.GdipDeleteBrush(hit);
+            }
             _text.Draw(g, lines, pad, pad);
         }
         finally

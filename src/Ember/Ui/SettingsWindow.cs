@@ -234,7 +234,7 @@ internal sealed class SettingsWindow : Win32Window
                 return IntPtr.Zero;
             }
             case W.WM_MOUSEWHEEL:
-                ScrollTo(_scroll - W.HiWord(wParam) / 120 * S(48));
+                ScrollTo(_scroll - W.HiWord(wParam) * S(48) / 120);
                 return IntPtr.Zero;
             case W.WM_SIZE:
                 UpdateScrollBar();

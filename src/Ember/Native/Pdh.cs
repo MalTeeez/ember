@@ -48,6 +48,7 @@ internal sealed class PdhQuery : IDisposable
     {
         if (c == null) return;
         PdhRemoveCounter(c.Handle);
+        c.Free();
         _counters.Remove(c);
     }
 
@@ -57,6 +58,7 @@ internal sealed class PdhQuery : IDisposable
     {
         if (_query != IntPtr.Zero) PdhCloseQuery(_query);
         _query = IntPtr.Zero;
+        foreach (var c in _counters) c.Free();
         _counters.Clear();
     }
 
@@ -68,6 +70,13 @@ internal sealed class PdhQuery : IDisposable
         private uint _bufferSize;
 
         public PdhCounter(IntPtr h, string path) { Handle = h; Path = path; }
+
+        public void Free()
+        {
+            if (_buffer != IntPtr.Zero) Marshal.FreeHGlobal(_buffer);
+            _buffer = IntPtr.Zero;
+            _bufferSize = 0;
+        }
 
         /// <summary>Single value, or null if not valid (for example the first sample of a rate counter).</summary>
         public double? Value()

@@ -201,8 +201,8 @@ internal sealed partial class Sampler : IDisposable
         _stop = true;
         _running.Set();
         _wake.Set();
-        _thread.Join(2000);
-        _pdh.Dispose();
+        bool ended = !_thread.IsAlive || _thread.Join(3000);
+        if (ended) _pdh.Dispose(); // never close the query while the thread may still use it
         _temps.Dispose();
     }
 }
