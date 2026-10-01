@@ -40,3 +40,15 @@ Rule: when the spec is silent, choose the simplest option.
 | G6 | The GPU line shows when load, temperature, VRAM or top process is visible; load/temperature fields are blank when their item is not visible. VRAM is a separate line `vram 7.8/8.0 GB 97%`. | One block for each GPU (spec). |
 | G7 | GPU load and CPU load have no colour gradient (monochrome graphs). | The spec gives them a visibility threshold only, not warning/critical values. |
 | G8 | PDH "GPU Engine" and "GPU Adapter Memory" counters are added only while a GPU item that needs them is on. | The GPU Engine wildcard counter has many instances and costs CPU. |
+
+## Memory, disk and processes
+
+| # | Decision | Reason |
+| --- | --- | --- |
+| M1 | Critical values that the spec does not give: commit charge 95 %, hard page faults 5000/s, disk active 95 %, disk queue 5. | Settings need warning and critical values for each item. |
+| M2 | Free space colour: gradient on % (warning 10, critical 5); below 20 GB free it is at least amber. | Spec: "< 10 % or < 20 GB (amber), < 5 % (red)". |
+| M3 | Free space is read every 10 s, fixed drives only. | It changes slowly; removable drives can spin up. |
+| M4 | Process data (CPU time, private bytes, I/O bytes) comes from one `NtQuerySystemInformation(SystemProcessInformation)` call. Top disk process = ReadTransferCount + WriteTransferCount per second. | This is the same kernel data as PDH `Process\IO Data Bytes/sec`, but with PIDs and at much lower CPU cost than the PDH Process object. The value is approximate, as the spec says. |
+| M5 | Processes are scanned only while a top-process item is visible or waiting for its show delay. | CPU target < 1 %. |
+| M6 | Top CPU process % = share of all logical cores (Task Manager style, 100 % = whole CPU). | Same scale as the combined load. |
+| M7 | Disk label `d0`, `d1` … from the PDH PhysicalDisk instance number, followed by its volumes. | Short, fits the 4-column label. |
