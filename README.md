@@ -19,7 +19,7 @@ cpu   83° ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤  25% 3.6GHz     ← temperature (when 
 5h      :::::::::::::::::::  42%
  ↻  52m                ◷  will last
 week    :::::::::::::::::::  71%
- ↻  2d22h      ⚠  empty 1d22h early
+ ↻  2d22h       ⚠  empty Sat 16:00
 ```
 
 Screenshots (themes and options; the last two with "Show everything"):
@@ -111,7 +111,7 @@ To remove Ember: `.\uninstall.ps1` (as administrator). Settings and notes stay i
 - **Ping lines** show the pinged host; options in Settings → Network: hide the host, ping always (coloured by the thresholds), ping to the router (off by default), and the route to the internet host (traceroute every 30 s; hops that do not answer are left out and the next answering hop gets `*`; hover a hop for the full address, its DNS name and round trip).
 - **Devices:** a name longer than the column shows as brand and kind (`Razer mouse`, `Sony headset`, with a number when several match); a battery icon (charging icon while charging) is before the value.
 - **Top processes** show under the lines they belong to: the top memory process under used/commit (not under paging, which lists its own processes), the top disk process under the busy disks, the top CPU process under the cores.
-- **Usage limits** (Claude, Codex, Copilot): 2 lines each: bar and %, then the time to the reset (↻) and the projection (will last / empty … before reset, or "early" when the long text does not fit / no trend yet). All bars have the same length; the label column grows for long labels (week, opus, sonnet, premium). When a source gives no data, its section hides (no empty space) and stays hidden for at least 1 min.
+- **Usage limits** (Claude, Codex, Copilot): 2 lines each: bar and %, then the time to the reset (↻) and the projection (will last / empty at a local time such as "Sat 16:00" / no trend yet; hover for details). All bars have the same length; the label column grows for long labels (week, opus, sonnet, premium). When a source gives no data, its section hides (no empty space) and stays hidden for at least 1 min.
 - **Tray icon** (amber dot): Show widget, New note, restore minimized notes, Edit layout, Show everything, Settings, Open log, Exit.
 - **Edit layout:** the widget gets a dark background and can be dragged anywhere. The position is saved as an offset from a corner of the monitor (Settings → General → Corner).
 - **Show everything** (tray or Settings → General → Debug): every enabled line shows at once, thresholds and delays are ignored, and missing data gets sample values. Use it to choose a theme and layout.

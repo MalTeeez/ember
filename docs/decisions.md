@@ -234,4 +234,6 @@ These decisions replace older ones where they conflict (noted in brackets).
 | B13 | **Tooltips:** drawn only when the text changes; same text follows the cursor by moving the window (no redraw, not for moves under 3 px). Hover check every 50 ms. Info-only hits (hop lines) keep the arrow cursor. | Tooltips felt laggy (redrawn every 100 ms tick). |
 | B14 | Process details window: subtitle without the "·" separator. | Requested. |
 | B15 | **Packets per minute:** `8.4k pkt/m` = average packet rate of the last 60 s × 60 (gaps do not count as zero); coloured by the peak of the last hour. [replaces Z4 per-second packets] | Requested; per second read like a total. |
+| B16 | **Projection as a time:** `⚠ empty Sat 16:00` (local; "today 18:30" on the same day; a date beyond 6 days) instead of "empty 22h25m early"; the tooltip has the full date, the time before the reset and the pace method (short window: last 30 min, else window average; long window: average since the window started). The Claude website uses its own pace, so the times can differ a little. | Comparable with the website ("you'll run out tomorrow evening"). |
+| B17 | **Tree lines:** in a run of sub-lines (same "└" column), all but the last show "├". | Requested. |
 

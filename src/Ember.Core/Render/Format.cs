@@ -16,6 +16,18 @@ public static class Format
         return ((int)Math.Floor(t.TotalDays)).ToString(Inv) + "d" + t.Hours.ToString(Inv) + "h";
     }
 
+    /// <summary>
+    /// A local time from the view of <paramref name="now"/>: "today 18:30", "Sat 18:30" (within a week),
+    /// else "2 Oct 18:30". Long form: "Sat 3 Oct 18:30".
+    /// </summary>
+    public static string When(DateTime now, DateTime at, bool long_ = false)
+    {
+        if (long_) return at.ToString("ddd d MMM HH:mm", Inv);
+        if (at.Date == now.Date) return "today " + at.ToString("HH:mm", Inv);
+        if (at.Date > now.Date && (at.Date - now.Date).TotalDays < 7) return at.ToString("ddd HH:mm", Inv);
+        return at.ToString("d MMM HH:mm", Inv);
+    }
+
     // ───── 4-character fields: 3 for the value, 1 for the unit letter ─────
 
     /// <summary>" 23%", "100%".</summary>

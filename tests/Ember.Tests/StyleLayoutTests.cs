@@ -608,7 +608,7 @@ public class FaultLineTests
         Assert.True(c.Needs.Faults);
         int k = lines.FindIndex(l => l.Text.StartsWith("hard disk paging"));
         var first = lines[k + 1];
-        Assert.StartsWith(" └ chrome ", first.Text); // no .exe
+        Assert.StartsWith(" ├ chrome ", first.Text); // no .exe; "├" as more sub-lines follow
         Assert.EndsWith(" 4.0GB  900/s", first.Text);
         Assert.Equal(10, first.Pid);
         // chrome: a quarter of the RAM and 90 % of the faults → top colour; code.exe lower.
@@ -675,7 +675,7 @@ public class SoftPagingAndPeakTests
         var softOnly = Run(10, 60000);
         int k = softOnly.FindIndex(l => l.Text.StartsWith("soft disk paging"));
         Assert.True(k >= 0);
-        Assert.StartsWith(" └ chrome ", softOnly[k + 1].Text);
+        Assert.StartsWith(" ├ chrome ", softOnly[k + 1].Text);
         var both = Run(6000, 60000);
         Assert.Contains(both, l => l.Text.StartsWith("hard disk paging"));
         Assert.DoesNotContain(both, l => l.Text.StartsWith("soft disk paging"));
@@ -765,7 +765,7 @@ public class V6Tests
         cfg.Entries.First(e => e.Id == "net.quality").Enabled = true;
         cfg.Network.PingAlways = cfg.Network.ShowTraceroute = true;
         var lines = new StatusComposer().Compose(new Snapshot { Time = new DateTime(2026, 10, 1, 12, 0, 0), Quality = new Ember.Core.Net.NetQuality(0, 0, 1, 12, true, "192.168.1.1", "1.1.1.1") { Hops = hops } }, cfg);
-        Assert.Contains(lines, l => l.Text.StartsWith("  └ * 4 10.0.0.1") && l.Hits.Any(h => h.Tooltip.Contains("2 hops before")));
+        Assert.Contains(lines, l => l.Text.StartsWith("  ├ * 4 10.0.0.1") && l.Hits.Any(h => h.Tooltip.Contains("2 hops before")));
     }
 
     [Fact]
@@ -817,5 +817,27 @@ public class V8Tests
         off.Network.ShowTraceroute = false;
         int without = c.Compose(new Snapshot { Time = t0.AddSeconds(1), Quality = q }, off).Count;
         Assert.Equal(with - 2, without);
+    }
+}
+
+public class V9Tests
+{
+    [Fact]
+    public void When_RelativeDayNames()
+    {
+        var now = new DateTime(2026, 10, 2, 10, 33, 0); // Friday
+        Assert.Equal("today 18:30", Format.When(now, new DateTime(2026, 10, 2, 18, 30, 0)));
+        Assert.Equal("Sat 19:00", Format.When(now, new DateTime(2026, 10, 3, 19, 0, 0)));
+        Assert.Equal("12 Oct 09:00", Format.When(now, new DateTime(2026, 10, 12, 9, 0, 0)));
+    }
+
+    [Fact]
+    public void Tree_MiddleBranches()
+    {
+        Ember.Core.Render.Line L(string t) { var b = new LineBuilder(); b.Add(t, Palette.Dim); return b.Build(); }
+        var lines = new List<Ember.Core.Render.Line> { L("cpu"), L("  └ a"), L("  └ b"), L("  └ c"), L("gpu"), L("  └ d") };
+        StatusComposer.TreeBranches(lines);
+        Assert.Equal(new[] { "  ├ a", "  ├ b", "  └ c" }, lines.Skip(1).Take(3).Select(l => l.Text.TrimEnd()));
+        Assert.Equal("  └ d", lines[5].Text.TrimEnd());
     }
 }

@@ -242,6 +242,7 @@ public sealed class StatusComposer
             decos.Add(deco);
         }
         FlushSection();
+        TreeBranches(result);
         if (_c.Theme.RowStripes) Stripe(result, decos);
         // No empty lines at the top or bottom of the widget.
         while (result.Count > 0 && IsEmpty(result[0]) && !result[0].IsPadding) result.RemoveAt(0);
@@ -265,6 +266,44 @@ public sealed class StatusComposer
     }
 
     private static bool IsEmpty(Line l) => l.Text.Trim().Length == 0 && l.Hits.Count == 0;
+
+    /// <summary>
+    /// Sub-lines as a tree: in a run of lines that start with "└" in the same column (only spaces before
+    /// it), all but the last get "├", so the branch continues down to the last sub-line.
+    /// </summary>
+    public static void TreeBranches(List<Line> lines)
+    {
+        static int BranchCol(Line l)
+        {
+            if (l.IsPadding) return -1;
+            string t = l.Text;
+            int i = 0;
+            while (i < t.Length && t[i] == ' ') i++;
+            return i < t.Length && t[i] == '└' ? i : -1;
+        }
+        for (int i = 0; i + 1 < lines.Count; i++)
+        {
+            int col = BranchCol(lines[i]);
+            if (col >= 0 && BranchCol(lines[i + 1]) == col) ReplaceChar(lines[i], col, '├');
+        }
+    }
+
+    private static void ReplaceChar(Line l, int col, char ch)
+    {
+        int pos = 0;
+        for (int k = 0; k < l.Runs.Count; k++)
+        {
+            var r = l.Runs[k];
+            if (col < pos + r.Text.Length)
+            {
+                var chars = r.Text.ToCharArray();
+                chars[col - pos] = ch;
+                l.Runs[k] = r with { Text = new string(chars) };
+                return;
+            }
+            pos += r.Text.Length;
+        }
+    }
 
     /// <summary>Every second content line of a section gets a faint band (counting restarts after a header or blank line).</summary>
     private void Stripe(List<Line> lines, HashSet<Line> decos)
@@ -1047,7 +1086,20 @@ public sealed class StatusComposer
             Val(r, Format.Duration(reset));
         }
         if (showProjection) Projection(r, c.Projection, projection);
+        if (showProjection && c.Projection.Kind != ProjectionKind.None)
+            r.LineHit(HitAction.None, "", ProjectionTip(c));
         if (r.Column > 1) yield return r.Build();
+    }
+
+    private string ProjectionTip(ClaudeLine c)
+    {
+        var p = c.Projection;
+        string reset = Format.When(_now, _now + p.TimeToReset, long_: true);
+        string pace = "Pace: " + (c.ResolvedKind == UsageKind.Short ? "the last 30 min (or the window average)" : "the average since the window started");
+        if (p.Kind == ProjectionKind.Limit)
+            return $"Runs out {Format.When(_now, _now + p.TimeToLimit, long_: true)} at this pace, " +
+                   $"{Format.Duration(p.TimeToReset - p.TimeToLimit)} before the reset ({reset}).\n{pace}.";
+        return $"Lasts until the reset ({reset}) at this pace.\n{pace}.";
     }
 
     /// <summary>The projection, right-aligned after the refresh time (short wording when the long one does not fit).</summary>
@@ -1061,14 +1113,14 @@ public sealed class StatusComposer
                 break;
             case ProjectionKind.Limit:
             {
+                // "⚠ empty Sat 18:30" — when the limit is reached at the current pace (local time), like
+                // the Claude website ("you'll run out tomorrow evening"); the tooltip has the details.
                 var color = _c.Severity(p.Ratio, projection.Warn, projection.Crit);
-                string d = Format.Duration(p.TimeToReset - p.TimeToLimit);
                 runs = new[]
                 {
                     new Run(Icons.Warning + " ", color, RunStyle.Icon), new Run(" empty ", color),
-                    new Run(d, color, ValueStyle), new Run(" before reset", color),
+                    new Run(Format.When(_now, _now + p.TimeToLimit), color, ValueStyle),
                 };
-                if (r.Column + 2 + LineBuilder.Len(runs) > Layout.Width) runs[3] = new Run(" early", color);
                 break;
             }
             default:
