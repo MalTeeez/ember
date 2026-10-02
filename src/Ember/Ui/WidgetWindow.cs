@@ -361,6 +361,28 @@ internal sealed class WidgetWindow : Win32Window
         return best;
     }
 
+    private readonly System.Text.StringBuilder _cls = new(32);
+
+    /// <summary>True if the top window under the cursor is the widget, the desktop (WorkerW/Progman) or a window below the widget.
+    /// A transparent widget is skipped by WindowFromPoint, so then the desktop is found.</summary>
+    private bool Uncovered(POINT p)
+    {
+        IntPtr w = W.WindowFromPoint(p);
+        if (w == IntPtr.Zero) return false;
+        IntPtr root = W.GetAncestor(w, W.GA_ROOT);
+        if (root == IntPtr.Zero) root = w;
+        if (root == Handle) return true;
+        _cls.Clear();
+        W.GetClassName(root, _cls, _cls.Capacity);
+        string c = _cls.ToString();
+        if (c is "WorkerW" or "Progman") return true;
+        // Another window below the widget (for example a note): the widget is on top there.
+        IntPtr n = Handle;
+        for (int i = 0; i < 64 && n != IntPtr.Zero; i++)
+            if ((n = W.GetWindow(n, W.GW_HWNDNEXT)) == root) return true;
+        return false;
+    }
+
     private int HitAtScreen(POINT p) => HitAt(p.X - _pos.X, p.Y - _pos.Y);
 
     private void SetHover(int index, POINT cursor)
@@ -384,7 +406,8 @@ internal sealed class WidgetWindow : Win32Window
                 if (Hidden) return IntPtr.Zero;
                 if (W.GetCursorPos(out var cp))
                 {
-                    int hit = HitAtScreen(cp);
+                    // Only when the widget is not covered (a game or another app over it): no hover, no tooltip.
+                    int hit = Uncovered(cp) ? HitAtScreen(cp) : -1;
                     SetTransparent(hit < 0);
                     SetHover(hit, cp);
                 }

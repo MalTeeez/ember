@@ -240,3 +240,4 @@ These decisions replace older ones where they conflict (noted in brackets).
 | B19 | **GPU top process** shows only while its GPU's load line shows, directly under that line (with several GPUs each process is under its own GPU). | A process line under a hidden GPU pointed to nothing. |
 | B20 | **Shrink together:** when the item heights change anyway (a section grows, or its kept space ends), kept space that is at least half through its hold time is released in the same step. | Fewer separate resizes. |
 
+| B21 | **Covered widget:** hover and tooltips work only when the window under the cursor is the widget, the desktop, or a window below the widget (WindowFromPoint). | Tooltips showed over games and other apps. |
