@@ -61,7 +61,7 @@ public sealed class StatusComposer
             _keep.Trace = value;
         }
     }
-    private int _lastCount = -1, _lastPadding = -1;
+    private int _lastCount = -1, _lastPadding = -1, _lastItemHeight = -1;
     private readonly Dictionary<string, int> _stickyPid = new();
 
     // Enough samples for the longest graph (from the label column to the right edge).
@@ -83,6 +83,7 @@ public sealed class StatusComposer
         _hist.Clear();
         _cores.Reset();
         _keep.Clear();
+        _lastItemHeight = -1;
         _gate.Clear();
         _hourPeak.Clear();
         _pkMinute.Clear();
@@ -190,25 +191,42 @@ public sealed class StatusComposer
         var output = new List<Line>?[entries.Count];
         var pads = new int[entries.Count];
         int pad = 0;
+        int Reserve()
+        {
+            int total = 0;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var e = entries[i];
+                if (e.Kind != "item" || !e.Enabled) continue;
+                if (_gone.Contains(e.Id))
+                {
+                    _keep.Forget(e.Id);
+                    height[i] = real[i] = 0;
+                    continue;
+                }
+                int n = items.GetValueOrDefault(e.Id)?.Count ?? 0;
+                height[i] = _keep.Reserve(e.Id, n, _now, hold);
+                real[i] = n;
+                total += height[i];
+            }
+            return total;
+        }
+        int totalHeight = Reserve();
+        // The height changes anyway (a section grows or its kept space ends): also release kept space
+        // that is half through its hold time, so the widget moves once instead of again a bit later.
+        if (_lastItemHeight >= 0 && totalHeight != _lastItemHeight && _keep.ReleaseWithResize(_now, hold) > 0)
+            totalHeight = Reserve();
+        _lastItemHeight = totalHeight;
         for (int i = 0; i < entries.Count; i++)
         {
             var e = entries[i];
             if (e.Kind != "item" || !e.Enabled) continue;
-            if (_gone.Contains(e.Id))
-            {
-                // No data from its source: no kept space either, so the whole section goes.
-                _keep.Forget(e.Id);
-                output[i] = new List<Line>();
-                continue;
-            }
-            var lines = items.GetValueOrDefault(e.Id) ?? new List<Line>();
-            int h = _keep.Reserve(e.Id, lines.Count, _now, hold);
-            var list = new List<Line>(lines);
-            if (bottom) pad += h - lines.Count;
-            else if (section) pads[i] = h - lines.Count;
+            // No data from its source: no kept space either, so the whole section goes.
+            var list = _gone.Contains(e.Id) ? new List<Line>() : new List<Line>(items.GetValueOrDefault(e.Id) ?? new List<Line>());
+            int h = height[i];
+            if (bottom) pad += h - real[i];
+            else if (section) pads[i] = h - real[i];
             else while (list.Count < h) list.Add(Layout.Blank(padding: true));
-            height[i] = h;
-            real[i] = lines.Count;
             output[i] = list;
         }
 
@@ -705,6 +723,7 @@ public sealed class StatusComposer
 
             bool loadVis = g.Load is { } l && Vis(key + ".load", Above(key + ".load", l, t.GpuLoad, Math.Min(5, t.GpuLoad / 2)));
             bool tempVis = _cfg.Fields.GpuTemp && g.Temp is { } tc && Vis(key + ".temp", Above(key + ".temp", tc, t.GpuTemp.Warn, 3));
+            bool loadShown = On("gpu.load") && loadVis;
             if (On("gpu.load") && (loadVis || tempVis))
             {
                 // "4090  72° ⣀⣠⣴⣶⣿…  95%" — temperature (when shown), graph, load (like the cpu line).
@@ -723,6 +742,15 @@ public sealed class StatusComposer
                 loadLines.Add(b.Build());
             }
 
+            // Top process: only while this GPU's load line shows (a process "under" a hidden GPU points
+            // to nothing), directly under that line when the load lines are on.
+            if (On("gpu.top") && g.Load is { } l2)
+            {
+                bool vis = Vis(key + ".top", Above(key + ".top", l2, t.GpuTopProcessLoad, 15)) && (loadShown || !On("gpu.load"));
+                var p = Sticky(key, vis ? g.Tops : null);
+                if (vis && p != null) (loadShown ? loadLines : topLines).Add(ProcessLine(p));
+            }
+
             double vramPct = g.VramUsedBytes is { } vu && g.VramTotalBytes is { } vt && vt > 0 ? 100 * vu / vt : double.NaN;
             if (On("gpu.vram") && !g.Integrated && !double.IsNaN(vramPct) && Vis(key + ".vram", t.Vram.Crossed(vramPct)))
             {
@@ -733,12 +761,6 @@ public sealed class StatusComposer
                 vramLines.Add(b.Build());
             }
 
-            if (On("gpu.top") && g.Load is { } l2)
-            {
-                bool vis = Vis(key + ".top", Above(key + ".top", l2, t.GpuTopProcessLoad, 15));
-                var p = Sticky(key, vis ? g.Tops : null);
-                if (vis && p != null) topLines.Add(ProcessLine(p));
-            }
         }
         items["gpu.load"] = loadLines;
         items["gpu.vram"] = vramLines;

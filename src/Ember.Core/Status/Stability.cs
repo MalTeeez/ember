@@ -7,12 +7,14 @@ namespace Ember.Core.Status;
 public sealed class HeightKeeper
 {
     private readonly Dictionary<string, (int Height, DateTime LastNeeded)> _keep = new();
+    private readonly Dictionary<string, int> _lines = new();
     /// <summary>Decision log (extended debug).</summary>
     public Action<string>? Trace { get; set; }
 
     /// <summary>Returns the height to reserve for the key.</summary>
     public int Reserve(string key, int lines, DateTime now, TimeSpan hold)
     {
+        _lines[key] = lines;
         if (hold <= TimeSpan.Zero)
         {
             _keep.Remove(key);
@@ -34,12 +36,31 @@ public sealed class HeightKeeper
         return k.Height;
     }
 
+    /// <summary>
+    /// The widget resizes anyway: also release kept space that is at least <paramref name="fraction"/>
+    /// through its hold time, so several sections shrink in one move instead of one after the other.
+    /// Returns how many keys were released.
+    /// </summary>
+    public int ReleaseWithResize(DateTime now, TimeSpan hold, double fraction = 0.5)
+    {
+        if (hold <= TimeSpan.Zero) return 0;
+        var due = _keep.Where(kv => _lines.TryGetValue(kv.Key, out int n) && kv.Value.Height > n
+                                    && now - kv.Value.LastNeeded >= hold * fraction).Select(kv => kv.Key).ToList();
+        foreach (var k in due)
+        {
+            Trace?.Invoke($"{k}: kept space released early ({(now - _keep[k].LastNeeded).TotalSeconds:0} s), together with another resize");
+            _keep.Remove(k);
+        }
+        return due.Count;
+    }
+
     /// <summary>Drops the kept height of one key (its item is gone on purpose, not just smaller).</summary>
     public void Forget(string key) => _keep.Remove(key);
 
     public void Clear()
     {
         _keep.Clear();
+        _lines.Clear();
         _traced.Clear();
     }
 

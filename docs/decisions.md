@@ -237,4 +237,6 @@ These decisions replace older ones where they conflict (noted in brackets).
 | B16 | **Projection pace:** the long (weekly) window uses the last 24 h of own samples (at least 12 h needed; samples kept in `%APPDATA%\\Ember\\usage-<source>.txt` across restarts; a new window or a drop starts a new history), else the window average. The line keeps "empty 1d22h before reset" / "early"; the tooltip has the run-out time, the reset and the pace used. | The week average made the estimate earlier than the Claude website (which uses the recent pace). |
 | B17 | **Tree lines:** in a run of sub-lines (same "└" column), all but the last show "├". | Requested. |
 | B18 | **Toolbar band** option: a lighter band behind the toolbar line, inset from the window edges. | Requested (an earlier look). |
+| B19 | **GPU top process** shows only while its GPU's load line shows, directly under that line (with several GPUs each process is under its own GPU). | A process line under a hidden GPU pointed to nothing. |
+| B20 | **Shrink together:** when the item heights change anyway (a section grows, or its kept space ends), kept space that is at least half through its hold time is released in the same step. | Fewer separate resizes. |
 

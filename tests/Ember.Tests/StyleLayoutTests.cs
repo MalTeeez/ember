@@ -864,3 +864,43 @@ public class PaceTests
         Assert.True(copy.Lines(t0).Single().RecentPace);
     }
 }
+
+public class V10Tests
+{
+    [Fact]
+    public void GpuTop_OnlyUnderItsVisibleGpu()
+    {
+        var cfg = new EmberSettings();
+        cfg.Layout.HoldSeconds = 0;
+        cfg.Intervals.HideDelaySeconds = 0;
+        var c = new StatusComposer();
+        var t0 = new DateTime(2026, 10, 2, 12, 0, 0);
+        List<ProcInfo> tops = new() { new(7, "game.exe", 60, "60%") };
+        List<Ember.Core.Render.Line> lines = new();
+        for (int i = 0; i <= 6; i++)
+            lines = c.Compose(new Snapshot { Time = t0.AddSeconds(i), Gpus = new() { new() { Luid = "a", Name = "RTX 4090", Load = 80, Tops = tops } } }, cfg);
+        int g = lines.FindIndex(l => l.Text.StartsWith("4090"));
+        Assert.Equal(7, lines[g + 1].Pid);
+        // The load line is gone: no process line for it either.
+        cfg.Thresholds.GpuLoad = 95;
+        for (int i = 7; i <= 12; i++)
+            lines = c.Compose(new Snapshot { Time = t0.AddSeconds(i), Gpus = new() { new() { Luid = "a", Name = "RTX 4090", Load = 80, Tops = tops } } }, cfg);
+        Assert.DoesNotContain(lines, l => l.Pid == 7);
+    }
+
+    [Fact]
+    public void KeptSpace_ReleasedTogetherWithAResize()
+    {
+        var k = new HeightKeeper();
+        var hold = TimeSpan.FromSeconds(60);
+        var t0 = new DateTime(2026, 1, 1);
+        k.Reserve("a", 3, t0, hold);
+        k.Reserve("b", 2, t0.AddSeconds(38), hold);   // b needed its 2 lines until 38 s
+        Assert.Equal(3, k.Reserve("a", 1, t0.AddSeconds(10), hold));  // a keeps 2 empty (since 10 s)
+        Assert.Equal(2, k.Reserve("b", 0, t0.AddSeconds(40), hold));  // b keeps 2 empty (since 40 s)
+        // At 45 s something else resizes: b (7 s through) stays, a (45 s through) goes with it.
+        Assert.Equal(1, k.ReleaseWithResize(t0.AddSeconds(45), hold));
+        Assert.Equal(1, k.Reserve("a", 1, t0.AddSeconds(45), hold));
+        Assert.Equal(2, k.Reserve("b", 0, t0.AddSeconds(45), hold));
+    }
+}
