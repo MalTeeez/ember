@@ -241,3 +241,4 @@ These decisions replace older ones where they conflict (noted in brackets).
 | B20 | **Shrink together:** when the item heights change anyway (a section grows, or its kept space ends), kept space that is at least half through its hold time is released in the same step. | Fewer separate resizes. |
 
 | B21 | **Covered widget:** hover and tooltips work only when the window under the cursor is the widget, the desktop, or a window below the widget (WindowFromPoint). | Tooltips showed over games and other apps. |
+| B22 | **Pace tooltip:** shows the pace in use (%/h for 5 h, %/day for longer windows) and, while own samples are short, when the recent pace starts. The weekly recent pace needs 6 h of samples (was 12 h). Per-model windows also get a recent pace. | The old text said "not enough samples" while the average pace already projected well. |

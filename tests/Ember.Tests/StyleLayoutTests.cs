@@ -863,6 +863,20 @@ public class PaceTests
         copy.Update(Data(75), t0);
         Assert.True(copy.Lines(t0).Single().RecentPace);
     }
+
+    [Fact]
+    public void ShortHistory_GivesAveragePace_AndTimeToRecent()
+    {
+        var t0 = new DateTimeOffset(2026, 10, 2, 10, 0, 0, TimeSpan.Zero);
+        var reset = t0.AddHours(68); // 100 h elapsed
+        var tr = new Ember.Core.Claude.UsageTracker();
+        tr.Update(new(null, new Ember.Core.Claude.UsageWindow(50, reset, null), Array.Empty<(string, Ember.Core.Claude.UsageWindow)>()), t0.AddHours(-2));
+        tr.Update(new(null, new Ember.Core.Claude.UsageWindow(50, reset, null), Array.Empty<(string, Ember.Core.Claude.UsageWindow)>()), t0);
+        var line = tr.Lines(t0).Single();
+        Assert.False(line.RecentPace);
+        Assert.Equal(0.5, line.PacePerHour!.Value, 3);
+        Assert.Equal(TimeSpan.FromHours(4), line.RecentPaceIn);
+    }
 }
 
 public class V10Tests

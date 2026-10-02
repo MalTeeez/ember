@@ -1120,9 +1120,16 @@ public sealed class StatusComposer
     {
         var p = c.Projection;
         string reset = Format.When(_now, _now + p.TimeToReset, long_: true);
+        bool shortWindow = c.ResolvedKind == UsageKind.Short;
+        string rate = c.PacePerHour is { } ph
+            ? " (" + (shortWindow ? $"{ph:0.#} %/h" : $"{ph * 24:0.#} %/day") + ")"
+            : "";
         string pace = "Pace: " + (c.RecentPace
-            ? (c.ResolvedKind == UsageKind.Short ? "the last 30 min" : "the last 24 h")
-            : "the average since the window started (not enough own samples yet)");
+            ? (shortWindow ? "the last 30 min" : "the last 24 h") + rate
+            : "the average since the window started" + rate +
+              (c.RecentPaceIn is { } inn && inn > TimeSpan.Zero
+                  ? $";\nthe recent pace ({(shortWindow ? "last 30 min" : "last 24 h")}) is used in {Format.Duration(inn)}"
+                  : ""));
         if (p.Kind == ProjectionKind.Limit)
             return $"Runs out {Format.When(_now, _now + p.TimeToLimit, long_: true)} at this pace, " +
                    $"{Format.Duration(p.TimeToReset - p.TimeToLimit)} before the reset ({reset}).\n{pace}.";

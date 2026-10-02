@@ -94,6 +94,15 @@ public sealed class FiveHourRate
         return Math.Max(0, (end.Used - start.Used) / hours);
     }
 
+    /// <summary>Time until <see cref="Rate"/> has enough history (zero when ready).</summary>
+    public TimeSpan ReadyIn(DateTimeOffset now)
+    {
+        var need = MinSpan ?? Span;
+        if (_samples.Count == 0) return need;
+        var left = _samples[0].Time + need - now;
+        return left > TimeSpan.Zero ? left : TimeSpan.Zero;
+    }
+
     public void Clear()
     {
         _samples.Clear();
@@ -108,6 +117,10 @@ public sealed record ClaudeLine(string Label, double Used, TimeSpan? ResetIn, Pr
 {
     /// <summary>The projection uses the recent pace (own samples), not the window average.</summary>
     public bool RecentPace { get; init; }
+    /// <summary>The pace the projection uses (% per hour), when known.</summary>
+    public double? PacePerHour { get; init; }
+    /// <summary>Time until the recent pace is used (own samples still too short); null when it is never used.</summary>
+    public TimeSpan? RecentPaceIn { get; init; }
     /// <summary>Kind from the label when not set ("5h" short, "week" long, others extra).</summary>
     public UsageKind ResolvedKind => Kind != UsageKind.Auto ? Kind : Label switch { "5h" => UsageKind.Short, "week" or "wk" => UsageKind.Long, _ => UsageKind.Extra };
 }
@@ -120,7 +133,11 @@ public class UsageTracker
     /// Pace of the long window: the last 24 h of own samples (at least 12 h needed, kept across restarts),
     /// so a heavy start of the week does not make the projection too early; else the window average.
     /// </summary>
-    private readonly FiveHourRate _longRate = new() { Span = TimeSpan.FromHours(24), MinSpan = TimeSpan.FromHours(12) };
+    private readonly FiveHourRate _longRate = NewLongRate();
+    /// <summary>Recent pace of each extra (per-model) window; in memory only.</summary>
+    private readonly Dictionary<string, FiveHourRate> _modelRates = new();
+
+    private static FiveHourRate NewLongRate() => new() { Span = TimeSpan.FromHours(24), MinSpan = TimeSpan.FromHours(6) };
     public UsageData? Data { get; private set; }
     public DateTimeOffset DataTime { get; private set; }
 
@@ -130,6 +147,11 @@ public class UsageTracker
         DataTime = now;
         if (data.FiveHour is { } f) _rate.Add(now, f.Utilization, f.ResetsAt);
         if (data.SevenDay is { } w) _longRate.Add(now, w.Utilization, w.ResetsAt);
+        foreach (var (model, mw) in data.Models)
+        {
+            if (!_modelRates.TryGetValue(model, out var r)) _modelRates[model] = r = NewLongRate();
+            r.Add(now, mw.Utilization, mw.ResetsAt);
+        }
     }
 
     /// <summary>Long-window samples as text ("unix-seconds used reset-unix-seconds" per line), to keep them across restarts.</summary>
@@ -164,20 +186,34 @@ public class UsageTracker
         {
             // The short window follows the current pace (last 30 min of own samples) when the window is about 5 h.
             var len = f.Length ?? Projection.FiveHours;
-            double? rate = Math.Abs((len - Projection.FiveHours).TotalMinutes) < 1 ? _rate.Rate(now) : null;
-            lines.Add(new ClaudeLine(d.ShortLabel, f.Utilization, ResetIn(f, now),
-                Projection.Compute(f.Utilization, f.ResetsAt, now, len, rate), UsageKind.Short) { RecentPace = rate != null });
+            bool fiveHour = Math.Abs((len - Projection.FiveHours).TotalMinutes) < 1;
+            lines.Add(Line(d.ShortLabel, f, len, fiveHour ? _rate : null, UsageKind.Short, now));
         }
         if (d.SevenDay is { } w)
-            lines.Add(new ClaudeLine(d.LongLabel, w.Utilization, ResetIn(w, now),
-                Projection.Compute(w.Utilization, w.ResetsAt, now, w.Length ?? Projection.SevenDays, _longRate.Rate(now)), UsageKind.Long)
-            { RecentPace = _longRate.Rate(now) != null });
+            lines.Add(Line(d.LongLabel, w, w.Length ?? Projection.SevenDays, _longRate, UsageKind.Long, now));
         // Extra windows (Claude per-model weekly limits: only if higher than the general weekly limit).
         foreach (var (model, mw) in d.Models)
             if (d.ModelsAlways || (d.SevenDay is { } wk && mw.Utilization > wk.Utilization))
-                lines.Add(new ClaudeLine(d.ModelsAlways ? model : ModelLabel(model), mw.Utilization, ResetIn(mw, now),
-                    Projection.Compute(mw.Utilization, mw.ResetsAt, now, mw.Length ?? Projection.SevenDays), UsageKind.Extra));
+                lines.Add(Line(d.ModelsAlways ? model : ModelLabel(model), mw, mw.Length ?? Projection.SevenDays,
+                    _modelRates.GetValueOrDefault(model), UsageKind.Extra, now));
         return lines;
+    }
+
+    private static ClaudeLine Line(string label, UsageWindow w, TimeSpan len, FiveHourRate? recent, UsageKind kind, DateTimeOffset now)
+    {
+        double? rate = recent?.Rate(now);
+        double? pace = rate;
+        if (pace == null && w.ResetsAt is { } r)
+        {
+            var elapsed = len - (r - now);
+            if (elapsed >= Projection.MinElapsed) pace = w.Utilization / elapsed.TotalHours;
+        }
+        return new ClaudeLine(label, w.Utilization, ResetIn(w, now), Projection.Compute(w.Utilization, w.ResetsAt, now, len, rate), kind)
+        {
+            RecentPace = rate != null,
+            PacePerHour = pace,
+            RecentPaceIn = recent == null || rate != null ? null : recent.ReadyIn(now),
+        };
     }
 
     private static TimeSpan? ResetIn(UsageWindow w, DateTimeOffset now)
