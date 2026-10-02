@@ -66,6 +66,8 @@ public sealed class Theme
     // Backgrounds of rows and parts of rows (all off by default).
     /// <summary>Every second line of a section gets a faint band.</summary>
     public bool RowStripes { get; set; } = false;
+    /// <summary>The toolbar (top line) gets a lighter band.</summary>
+    public bool ToolbarBand { get; set; } = false;
     /// <summary>Section headers get a band in the header colour.</summary>
     public bool HeaderBand { get; set; } = false;
     /// <summary>Graphs get a dim track behind their cells.</summary>

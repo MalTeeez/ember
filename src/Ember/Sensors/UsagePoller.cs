@@ -62,7 +62,40 @@ internal abstract class UsagePoller : IDisposable
         Schedule(due < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : due);
     }
 
-    public void Start() => Schedule(TimeSpan.FromSeconds(2));
+    public void Start()
+    {
+        LoadHistory();
+        Schedule(TimeSpan.FromSeconds(2));
+    }
+
+    // The long-window samples (for the recent pace) are kept in a small file, so a restart does not lose them.
+    private string HistoryPath => Path.Combine(Paths.AppData, $"usage-{Source}.txt");
+    private bool _historyLoaded;
+
+    private void LoadHistory()
+    {
+        if (_historyLoaded) return;
+        _historyLoaded = true;
+        try
+        {
+            if (File.Exists(HistoryPath))
+            {
+                var text = File.ReadAllText(HistoryPath);
+                lock (_gate) _tracker.ImportHistory(text, DateTimeOffset.UtcNow);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log.SourceFailed(Source + ".history", ex); }
+    }
+
+    private void SaveHistory(string text)
+    {
+        try
+        {
+            Directory.CreateDirectory(Paths.AppData);
+            File.WriteAllText(HistoryPath, text);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log.SourceFailed(Source + ".history", ex); }
+    }
 
     public void Pause()
     {
@@ -96,6 +129,7 @@ internal abstract class UsagePoller : IDisposable
         if (_busy || _paused || !_enabled) return;
         _busy = true;
         _lastPoll = DateTime.UtcNow;
+        LoadHistory();
         try
         {
             await PollOnceAsync().ConfigureAwait(false);
@@ -144,7 +178,13 @@ internal abstract class UsagePoller : IDisposable
             return;
         }
         _backoff.OnSuccess();
-        lock (_gate) _tracker.Update(data, DateTimeOffset.UtcNow);
+        string history;
+        lock (_gate)
+        {
+            _tracker.Update(data, DateTimeOffset.UtcNow);
+            history = _tracker.ExportHistory();
+        }
+        SaveHistory(history);
         Log.SourceOk(Source);
     }
 

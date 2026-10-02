@@ -841,3 +841,26 @@ public class V9Tests
         Assert.Equal("  └ d", lines[5].Text.TrimEnd());
     }
 }
+
+public class PaceTests
+{
+    [Fact]
+    public void LongWindow_UsesLast24h_AndSurvivesExport()
+    {
+        var t0 = new DateTimeOffset(2026, 10, 2, 10, 0, 0, TimeSpan.Zero);
+        var reset = t0.AddHours(50);
+        Ember.Core.Claude.UsageData Data(double used) => new(null, new Ember.Core.Claude.UsageWindow(used, reset, null), Array.Empty<(string, Ember.Core.Claude.UsageWindow)>());
+        var tr = new Ember.Core.Claude.UsageTracker();
+        // 75 % after 118 h (window average 0.64 %/h: empty in 39 h, before the reset in 50 h),
+        // but only 0.4 %/h in the last 20 h: 25 % left = 62 h, after the reset.
+        for (int h = 0; h <= 20; h++) tr.Update(Data(67 + 0.4 * h), t0.AddHours(h - 20));
+        var line = tr.Lines(t0).Single();
+        Assert.True(line.RecentPace);
+        Assert.Equal(Ember.Core.Claude.ProjectionKind.Lasts, line.Projection.Kind);
+
+        var copy = new Ember.Core.Claude.UsageTracker();
+        copy.ImportHistory(tr.ExportHistory(), t0);
+        copy.Update(Data(75), t0);
+        Assert.True(copy.Lines(t0).Single().RecentPace);
+    }
+}

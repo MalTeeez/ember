@@ -57,6 +57,10 @@ public sealed class FiveHourRate
     private readonly List<(DateTimeOffset Time, double Used)> _samples = new();
     private DateTimeOffset? _reset;
     public TimeSpan Span { get; set; } = TimeSpan.FromMinutes(30);
+    /// <summary>The samples must cover at least this time for a rate (default: the whole span).</summary>
+    public TimeSpan? MinSpan { get; set; }
+    public IReadOnlyList<(DateTimeOffset Time, double Used)> Samples => _samples;
+    public DateTimeOffset? Reset => _reset;
 
     public void Add(DateTimeOffset time, double used, DateTimeOffset? resetsAt)
     {
@@ -71,12 +75,12 @@ public sealed class FiveHourRate
         _samples.RemoveAll(s => s.Time < cutoff);
     }
 
-    /// <summary>% per hour over the last 30 min, or null if the samples cover less than 30 min.</summary>
+    /// <summary>% per hour over the span (or the covered part of it, if at least <see cref="MinSpan"/>), else null.</summary>
     public double? Rate(DateTimeOffset now)
     {
         if (_samples.Count < 2) return null;
         var target = now - Span;
-        if (_samples[0].Time > target) return null; // less than 30 min of samples
+        if (_samples[0].Time > now - (MinSpan ?? Span)) return null; // too little history
         // Latest sample at or before the target time.
         var start = _samples[0];
         foreach (var s in _samples)
@@ -102,6 +106,8 @@ public enum UsageKind { Auto, Short, Long, Extra }
 /// <summary>One usage limit for the widget (Claude, Codex or Copilot).</summary>
 public sealed record ClaudeLine(string Label, double Used, TimeSpan? ResetIn, ProjectionResult Projection, UsageKind Kind = UsageKind.Auto)
 {
+    /// <summary>The projection uses the recent pace (own samples), not the window average.</summary>
+    public bool RecentPace { get; init; }
     /// <summary>Kind from the label when not set ("5h" short, "week" long, others extra).</summary>
     public UsageKind ResolvedKind => Kind != UsageKind.Auto ? Kind : Label switch { "5h" => UsageKind.Short, "week" or "wk" => UsageKind.Long, _ => UsageKind.Extra };
 }
@@ -110,6 +116,11 @@ public sealed record ClaudeLine(string Label, double Used, TimeSpan? ResetIn, Pr
 public class UsageTracker
 {
     private readonly FiveHourRate _rate = new();
+    /// <summary>
+    /// Pace of the long window: the last 24 h of own samples (at least 12 h needed, kept across restarts),
+    /// so a heavy start of the week does not make the projection too early; else the window average.
+    /// </summary>
+    private readonly FiveHourRate _longRate = new() { Span = TimeSpan.FromHours(24), MinSpan = TimeSpan.FromHours(12) };
     public UsageData? Data { get; private set; }
     public DateTimeOffset DataTime { get; private set; }
 
@@ -118,6 +129,28 @@ public class UsageTracker
         Data = data;
         DataTime = now;
         if (data.FiveHour is { } f) _rate.Add(now, f.Utilization, f.ResetsAt);
+        if (data.SevenDay is { } w) _longRate.Add(now, w.Utilization, w.ResetsAt);
+    }
+
+    /// <summary>Long-window samples as text ("unix-seconds used reset-unix-seconds" per line), to keep them across restarts.</summary>
+    public string ExportHistory()
+    {
+        var reset = _longRate.Reset?.ToUnixTimeSeconds() ?? 0;
+        return string.Join("\n", _longRate.Samples.Select(x =>
+            $"{x.Time.ToUnixTimeSeconds()} {x.Used.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} {reset}"));
+    }
+
+    public void ImportHistory(string text, DateTimeOffset now)
+    {
+        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var p = line.Trim().Split(' ');
+            if (p.Length < 3 || !long.TryParse(p[0], out long t) || !double.TryParse(p[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double used)
+                || !long.TryParse(p[2], out long r)) continue;
+            var time = DateTimeOffset.FromUnixTimeSeconds(t);
+            if (time > now || now - time > TimeSpan.FromHours(25)) continue;
+            _longRate.Add(time, used, r > 0 ? DateTimeOffset.FromUnixTimeSeconds(r) : null);
+        }
     }
 
     /// <summary>Hide the lines (token expired, request failed).</summary>
@@ -133,11 +166,12 @@ public class UsageTracker
             var len = f.Length ?? Projection.FiveHours;
             double? rate = Math.Abs((len - Projection.FiveHours).TotalMinutes) < 1 ? _rate.Rate(now) : null;
             lines.Add(new ClaudeLine(d.ShortLabel, f.Utilization, ResetIn(f, now),
-                Projection.Compute(f.Utilization, f.ResetsAt, now, len, rate), UsageKind.Short));
+                Projection.Compute(f.Utilization, f.ResetsAt, now, len, rate), UsageKind.Short) { RecentPace = rate != null });
         }
         if (d.SevenDay is { } w)
             lines.Add(new ClaudeLine(d.LongLabel, w.Utilization, ResetIn(w, now),
-                Projection.Compute(w.Utilization, w.ResetsAt, now, w.Length ?? Projection.SevenDays), UsageKind.Long));
+                Projection.Compute(w.Utilization, w.ResetsAt, now, w.Length ?? Projection.SevenDays, _longRate.Rate(now)), UsageKind.Long)
+            { RecentPace = _longRate.Rate(now) != null });
         // Extra windows (Claude per-model weekly limits: only if higher than the general weekly limit).
         foreach (var (model, mw) in d.Models)
             if (d.ModelsAlways || (d.SevenDay is { } wk && mw.Utilization > wk.Utilization))

@@ -319,8 +319,8 @@ public class ComposerTests
         Assert.StartsWith("week ::::", lines[h + 3].Text);
         Assert.Equal(lines[h + 1].Text.Count(ch => ch == ':'), lines[h + 3].Text.Count(ch => ch == ':')); // same bar length
         Assert.StartsWith(" " + Icons.Refresh + "  4d2h ", lines[h + 4].Text);
-        // Limit at T0 (Thu 1 Oct 12:00) + 52 h = Sat 16:00; the tooltip has the details.
-        Assert.EndsWith("empty Sat 16:00", lines[h + 4].Text);
+        Assert.EndsWith("empty 1d22h early", lines[h + 4].Text);
+        // Limit at T0 (Thu 1 Oct 12:00) + 52 h = Sat 16:00: in the tooltip.
         Assert.Contains(lines[h + 4].Hits, x => x.Tooltip.Contains("Runs out Sat 3 Oct 16:00") && x.Tooltip.Contains("1d22h before the reset"));
     }
 

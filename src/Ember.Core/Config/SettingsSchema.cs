@@ -195,6 +195,7 @@ public static class SettingsSchema
         yield return Choice(A, "Style", "Header alignment", ThemeStore.HeaderAligns, s => s.Theme.HeaderAlign, (s, t) => s.Theme.HeaderAlign = t);
         yield return Slider(A, "Style", "Header indent (characters)", 0, 12, s => s.Theme.HeaderIndent, (s, v) => s.Theme.HeaderIndent = (int)v);
         yield return Bool(A, "Row backgrounds", "Stripes on every second line", s => s.Theme.RowStripes, (s, v) => s.Theme.RowStripes = v);
+        yield return Bool(A, "Row backgrounds", "Band behind the toolbar (top line)", s => s.Theme.ToolbarBand, (s, v) => s.Theme.ToolbarBand = v);
         yield return Bool(A, "Row backgrounds", "Band behind headers", s => s.Theme.HeaderBand, (s, v) => s.Theme.HeaderBand = v);
         yield return Bool(A, "Row backgrounds", "Band behind process lines", s => s.Theme.ProcessBand, (s, v) => s.Theme.ProcessBand = v);
         yield return Bool(A, "Row backgrounds", "Track behind graphs", s => s.Theme.GraphTrack, (s, v) => s.Theme.GraphTrack = v);

@@ -243,6 +243,9 @@ public sealed class StatusComposer
         }
         FlushSection();
         TreeBranches(result);
+        // Optional band behind the toolbar (first line), inset from the edges.
+        if (_c.Theme.ToolbarBand && result.Count > 0 && result[0].Hits.Any(h => h.Action == HitAction.NewNote))
+            result[0].Back = _c.Band(_c.Text, 26);
         if (_c.Theme.RowStripes) Stripe(result, decos);
         // No empty lines at the top or bottom of the widget.
         while (result.Count > 0 && IsEmpty(result[0]) && !result[0].IsPadding) result.RemoveAt(0);
@@ -1095,7 +1098,9 @@ public sealed class StatusComposer
     {
         var p = c.Projection;
         string reset = Format.When(_now, _now + p.TimeToReset, long_: true);
-        string pace = "Pace: " + (c.ResolvedKind == UsageKind.Short ? "the last 30 min (or the window average)" : "the average since the window started");
+        string pace = "Pace: " + (c.RecentPace
+            ? (c.ResolvedKind == UsageKind.Short ? "the last 30 min" : "the last 24 h")
+            : "the average since the window started (not enough own samples yet)");
         if (p.Kind == ProjectionKind.Limit)
             return $"Runs out {Format.When(_now, _now + p.TimeToLimit, long_: true)} at this pace, " +
                    $"{Format.Duration(p.TimeToReset - p.TimeToLimit)} before the reset ({reset}).\n{pace}.";
@@ -1113,14 +1118,15 @@ public sealed class StatusComposer
                 break;
             case ProjectionKind.Limit:
             {
-                // "⚠ empty Sat 18:30" — when the limit is reached at the current pace (local time), like
-                // the Claude website ("you'll run out tomorrow evening"); the tooltip has the details.
+                // "⚠ empty 1d22h before reset" (or "… early" when it does not fit); the tooltip has the time.
                 var color = _c.Severity(p.Ratio, projection.Warn, projection.Crit);
+                string d = Format.Duration(p.TimeToReset - p.TimeToLimit);
                 runs = new[]
                 {
                     new Run(Icons.Warning + " ", color, RunStyle.Icon), new Run(" empty ", color),
-                    new Run(Format.When(_now, _now + p.TimeToLimit), color, ValueStyle),
+                    new Run(d, color, ValueStyle), new Run(" before reset", color),
                 };
+                if (r.Column + 2 + LineBuilder.Len(runs) > Layout.Width) runs[3] = new Run(" early", color);
                 break;
             }
             default:
