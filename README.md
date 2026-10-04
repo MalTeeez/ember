@@ -15,17 +15,12 @@ A small, text-only desktop widget for Windows. It shows only what needs attentio
 
 ## Install
 
-1. Download the exe or zip from [Releases](../../releases).
-2. In an **admin** PowerShell, in the folder with the files:
+1. Download `Ember-…-win-x64.exe` from [Releases](../../releases) and start it.
+2. Settings → General → **Install (start at logon)…**. Windows asks for admin once. Ember copies itself to `%LOCALAPPDATA%\Ember`, starts at each logon with admin rights (no UAC prompt), and restarts from there.
+3. **Update:** start a newer exe; Ember offers to update the install.
+4. **Uninstall:** Settings → General → **Uninstall…** (you choose whether settings and notes stay).
 
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\install.ps1
-   ```
-
-   This installs to `%LOCALAPPDATA%\Ember` and starts Ember at logon (with admin rights, without a UAC prompt).
-3. To remove: `.\uninstall.ps1` (as admin; add `-RemoveData` to also delete settings and notes).
-
-You can also just run `Ember.exe`.
+You can also just run the exe without installing.
 
 ## Requirements
 

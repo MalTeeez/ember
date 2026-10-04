@@ -7,8 +7,11 @@ namespace Ember;
 internal static class Program
 {
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
+        // Install/uninstall helper (started elevated by the app itself).
+        if (Installer.IsHelper(args)) return Installer.RunHelper(args);
+
         // Per-monitor DPI awareness v2 (also in app.manifest).
         try { W.SetProcessDpiAwarenessContext(W.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); }
         catch (EntryPointNotFoundException) { }
@@ -18,6 +21,7 @@ internal static class Program
         bool first;
         try { mutex = new Mutex(true, @"Local\Ember.SingleInstance", out first); }
         catch (UnauthorizedAccessException) { first = false; } // the running instance is elevated
+        if (!first && Installer.OfferUpdate()) return 0;
         if (!first)
         {
             var other = W.FindWindow(AppHost.HostClass, null);

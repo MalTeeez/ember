@@ -127,7 +127,11 @@ public static class SettingsSchema
     {
         // ── General ──
         const string G = "General";
-        yield return new SettingField { Page = G, Section = "Start", Label = "Start at logon (asks for admin)", Kind = FieldKind.Bool, IsSpecial = true };
+        yield return new SettingField
+        {
+            Page = G, Section = "Install", Label = InstallPlan.ButtonText(InstallPlan.ButtonKind.Install), Kind = FieldKind.Action, Action = "app.install", IsSpecial = true,
+            Tooltip = "Copies Ember to %LOCALAPPDATA%\\Ember and starts it at each logon with admin rights (for CPU temperatures). Asks for admin once.",
+        };
         yield return Slider(G, "Size", "Font size (pt)", 6, 24, s => s.Layout.FontSize, (s, v) => s.Layout.FontSize = Math.Round(v * 2) / 2, 0.5);
         yield return Slider(G, "Size", "Text opacity %", 10, 100, s => s.Layout.Opacity, (s, v) => s.Layout.Opacity = (int)v);
         yield return new SettingField

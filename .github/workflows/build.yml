@@ -46,15 +46,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Ember-win-x64
-          path: |
-            publish/Ember.exe
-            install.ps1
-            uninstall.ps1
+          path: publish/Ember.exe
           if-no-files-found: warn
 
       - name: Release
         # A pushed tag v*, or a push to main with a new <Version> in Ember.csproj (tag v<major>.<minor>[.<patch>]),
-        # creates the tag (if needed) and a GitHub release with the exe and a zip. Each tag gets one release.
+        # creates the tag (if needed) and a GitHub release with the exe. Each tag gets one release.
         if: github.event_name == 'push' && (github.ref_type == 'tag' || github.ref_name == 'main')
         shell: pwsh
         env:
@@ -69,11 +66,9 @@ jobs:
           }
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) { Write-Host "Release $tag exists: nothing to do."; exit 0 }
-          $zip = "Ember-$tag-win-x64.zip"
-          Compress-Archive -Path publish/Ember.exe, install.ps1, uninstall.ps1 -DestinationPath $zip
           Copy-Item publish/Ember.exe "Ember-$tag-win-x64.exe"
           $notes = "docs/releases/$tag.md"
-          $ghArgs = @($tag, $zip, "Ember-$tag-win-x64.exe", '--title', "Ember $tag", '--target', '${{ github.sha }}')
+          $ghArgs = @($tag, "Ember-$tag-win-x64.exe", '--title', "Ember $tag", '--target', '${{ github.sha }}')
           if (Test-Path $notes) { $ghArgs += @("--notes-file", $notes) } else { $ghArgs += "--generate-notes" }
           gh release create @ghArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

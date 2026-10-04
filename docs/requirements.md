@@ -178,7 +178,7 @@ A small settings window. Open it with a right-click on the widget or from the tr
 - **Network:** the adapter exclusion list.
 - **Layout:** position, monitor, font size, opacity.
 - **Notes:** hotkey for a new note.
-- **Start at logon:** on/off. Only a change asks for admin rights.
+- **Install / uninstall:** buttons in the settings (no scripts). Only the change asks for admin rights.
 - **Storage:** `%APPDATA%\Ember\settings.json`. Changes apply at once.
 
 ## Robustness

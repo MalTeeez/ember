@@ -36,7 +36,8 @@ internal sealed class SettingsWindow : Win32Window
     private bool _loading;
     private int _page, _scroll, _contentHeight;
     private float _scale = 1;
-    private IntPtr _autostartBox;
+    private IntPtr _installBtn;
+    private InstallPlan.ButtonKind _installKind;
     private int _navWidth;
 
     public event Action? Closed;
@@ -66,7 +67,7 @@ internal sealed class SettingsWindow : Win32Window
         ShowPage(0);
         W.ShowWindow(Handle, W.SW_SHOW);
         W.SetForegroundWindow(Handle);
-        QueryAutostart();
+        QueryInstall();
     }
 
     private int S(double v) => (int)Math.Round(v * _scale);
@@ -105,7 +106,6 @@ internal sealed class SettingsWindow : Win32Window
                 {
                     case FieldKind.Bool:
                         row.Ctrl = Child(row, "BUTTON", f.Label, W.BS_AUTOCHECKBOX | W.WS_TABSTOP, left, y, width, S(22), id);
-                        if (f.IsSpecial) _autostartBox = row.Ctrl;
                         y += S(26);
                         break;
                     case FieldKind.List:
@@ -139,7 +139,8 @@ internal sealed class SettingsWindow : Win32Window
                         y += S(30);
                         break;
                     case FieldKind.Action:
-                        row.Ctrl = Child(row, "BUTTON", f.Label, W.BS_PUSHBUTTON | W.WS_TABSTOP, left, y, S(200), S(28), id);
+                        row.Ctrl = Child(row, "BUTTON", f.Label, W.BS_PUSHBUTTON | W.WS_TABSTOP, left, y, f.IsSpecial ? S(260) : S(200), S(28), id);
+                        if (f.IsSpecial) _installBtn = row.Ctrl;
                         y += S(34);
                         break;
                     case FieldKind.LayoutEditor:
@@ -262,7 +263,7 @@ internal sealed class SettingsWindow : Win32Window
             switch (f.Kind)
             {
                 case FieldKind.Bool:
-                    if (!f.IsSpecial) W.SendMessage(r.Ctrl, W.BM_SETCHECK, (IntPtr)(f.Get(_work) == "1" ? 1 : 0), IntPtr.Zero);
+                    W.SendMessage(r.Ctrl, W.BM_SETCHECK, (IntPtr)(f.Get(_work) == "1" ? 1 : 0), IntPtr.Zero);
                     break;
                 case FieldKind.Choice:
                     W.SendMessage(r.Ctrl, W.CB_SETCURSEL, (IntPtr)Array.IndexOf(f.Choices ?? Array.Empty<string>(), f.Get(_work)), IntPtr.Zero);
@@ -347,7 +348,7 @@ internal sealed class SettingsWindow : Win32Window
         var f = row.Field;
         if (f.IsSpecial)
         {
-            ChangeAutostart(W.SendMessage(row.Ctrl, W.BM_GETCHECK, IntPtr.Zero, IntPtr.Zero) == (IntPtr)W.BST_CHECKED);
+            if (f.Kind == FieldKind.Action) RunInstall();
             return;
         }
         string value;
@@ -519,29 +520,45 @@ internal sealed class SettingsWindow : Win32Window
         UpdateScrollBar();
     }
 
-    // ───────── Start at logon ─────────
+    // ───────── Install / uninstall ─────────
 
-    private void QueryAutostart()
+    private void QueryInstall()
     {
-        if (_autostartBox == IntPtr.Zero) return;
-        W.EnableWindow(_autostartBox, false);
+        if (_installBtn == IntPtr.Zero) return;
+        W.EnableWindow(_installBtn, false);
         var hwnd = Handle;
-        Task.Run(() =>
-        {
-            bool on = Autostart.IsEnabled();
-            W.PostMessage(hwnd, WM_AUTOSTART_DONE, (IntPtr)(on ? 1 : 0), IntPtr.Zero);
-        });
+        Task.Run(() => W.PostMessage(hwnd, WM_AUTOSTART_DONE, (IntPtr)(int)Installer.CurrentButton(), IntPtr.Zero));
     }
 
-    private void ChangeAutostart(bool enable)
+    private void RunInstall()
     {
-        W.EnableWindow(_autostartBox, false);
+        var kind = _installKind;
+        bool removeData = false;
+        if (kind == InstallPlan.ButtonKind.Uninstall)
+        {
+            if (W.MessageBox(Handle, $"Uninstall Ember?\n\nEmber stops, no longer starts at logon, and {Installer.InstallDir} is deleted.",
+                    "Ember", W.MB_OKCANCEL | W.MB_ICONWARNING) != W.IDOK) return;
+            removeData = W.MessageBox(Handle, $"Also delete your settings and notes?\n\n{Paths.AppData}",
+                "Ember", W.MB_YESNO | W.MB_ICONWARNING) == W.IDYES;
+        }
+        W.EnableWindow(_installBtn, false);
         var hwnd = Handle;
         Task.Run(() =>
         {
-            Autostart.Set(enable);
-            bool on = Autostart.IsEnabled();
-            W.PostMessage(hwnd, WM_AUTOSTART_DONE, (IntPtr)(on ? 1 : 0), IntPtr.Zero);
+            var r = kind == InstallPlan.ButtonKind.Uninstall ? Installer.Uninstall(removeData) : Installer.Install();
+            if (r == Installer.Result.Done)
+            {
+                W.MessageBox(hwnd, kind == InstallPlan.ButtonKind.Uninstall
+                        ? "Ember is uninstalled. It closes now."
+                        : $"Ember is installed in {Installer.InstallDir} and starts at each logon.\nIt restarts now from there.",
+                    "Ember", W.MB_ICONINFORMATION);
+                var host = W.FindWindow(AppHost.HostClass, null);
+                if (host != IntPtr.Zero) W.PostMessage(host, W.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                return;
+            }
+            if (r == Installer.Result.Failed)
+                W.MessageBox(hwnd, "This did not work. Turn on the debug log for details.", "Ember", W.MB_ICONWARNING);
+            W.PostMessage(hwnd, WM_AUTOSTART_DONE, (IntPtr)(int)Installer.CurrentButton(), IntPtr.Zero);
         });
     }
 
@@ -608,10 +625,9 @@ internal sealed class SettingsWindow : Win32Window
                 break;
             }
             case WM_AUTOSTART_DONE:
-                _loading = true;
-                W.SendMessage(_autostartBox, W.BM_SETCHECK, wParam, IntPtr.Zero);
-                _loading = false;
-                W.EnableWindow(_autostartBox, true);
+                _installKind = (InstallPlan.ButtonKind)(int)wParam;
+                W.SetWindowText(_installBtn, InstallPlan.ButtonText(_installKind));
+                W.EnableWindow(_installBtn, true);
                 return IntPtr.Zero;
             case W.WM_VSCROLL:
             {

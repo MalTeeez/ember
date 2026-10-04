@@ -289,3 +289,36 @@ public class UtilTests
         Assert.Null(CpuNames.Parse("_Total"));
     }
 }
+
+public class InstallPlanTests
+{
+    [Fact]
+    public void Quote_FollowsArgvRules()
+    {
+        Assert.Equal("abc", Ember.Core.Config.InstallPlan.Quote("abc"));
+        Assert.Equal("\"\"", Ember.Core.Config.InstallPlan.Quote(""));
+        Assert.Equal("\"C:\\Program Files\\x\"", Ember.Core.Config.InstallPlan.Quote("C:\\Program Files\\x"));
+        Assert.Equal("\"C:\\a b\\\\\"", Ember.Core.Config.InstallPlan.Quote("C:\\a b\\"));
+        Assert.Equal("\"say \\\"hi\\\"\"", Ember.Core.Config.InstallPlan.Quote("say \"hi\""));
+    }
+
+    [Fact]
+    public void TaskXml_HasLogonTrigger_Highest_NoLimit_Escaped()
+    {
+        var x = Ember.Core.Config.InstallPlan.TaskXml("/apps/a&b/Ember.exe", "PC\\mika");
+        var doc = System.Xml.Linq.XDocument.Parse(x);
+        string all = doc.ToString();
+        Assert.Contains("<UserId>PC\\mika</UserId>", all);
+        Assert.Contains("<RunLevel>HighestAvailable</RunLevel>", all);
+        Assert.Contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", all);
+        Assert.Contains("<Command>/apps/a&amp;b/Ember.exe</Command>", all);
+    }
+
+    [Fact]
+    public void Button_DependsOnInstallAndRunningExe()
+    {
+        Assert.Equal(Ember.Core.Config.InstallPlan.ButtonKind.Install, Ember.Core.Config.InstallPlan.Button(false, "/d/Ember.exe", "/i/Ember.exe"));
+        Assert.Equal(Ember.Core.Config.InstallPlan.ButtonKind.Update, Ember.Core.Config.InstallPlan.Button(true, "/d/Ember.exe", "/i/Ember.exe"));
+        Assert.Equal(Ember.Core.Config.InstallPlan.ButtonKind.Uninstall, Ember.Core.Config.InstallPlan.Button(true, "/i/Ember.exe", "/i/Ember.exe"));
+    }
+}
