@@ -61,7 +61,3 @@ dotnet publish src/Ember/Ember.csproj -c Release -r win-x64 -o publish
 ```
 
 A new `<Version>` in `src/Ember/Ember.csproj` on `main` creates a GitHub release (notes from `docs/releases/<tag>.md`). Design choices: [docs/decisions.md](docs/decisions.md).
-
-## Not tested
-
-Ember was written on Linux. The tests and the Windows build run in CI, but these parts have not been checked on a real Windows machine: window behaviour and backgrounds, text drawing, mouse handling, DPI changes, sensor values, process actions, usage requests with real tokens, device batteries, network pings, the note editor, the settings window, the install scripts, sleep/lock/Explorer restarts, and resource use.
