@@ -33,6 +33,7 @@ public sealed class StatusComposer
     private readonly Dictionary<string, SlidingPeak> _hourPeak = new();
     private readonly Dictionary<string, MinuteSum> _pkMinute = new();
 
+    private readonly TrafficBaseline _netDown = new(), _netUp = new();
     private SlidingPeak HourPeak(string key, double value)
     {
         if (!_hourPeak.TryGetValue(key, out var p)) _hourPeak[key] = p = new SlidingPeak();
@@ -608,12 +609,21 @@ public sealed class StatusComposer
             if (!_pkMinute.TryGetValue("down", out var dm)) _pkMinute["down"] = dm = new MinuteSum();
             if (!_pkMinute.TryGetValue("up", out var um)) _pkMinute["up"] = um = new MinuteSum();
             double downMin = dm.Add(_now, downPk), upMin = um.Add(_now, upPk);
-            if (On("net.down")) items["net.down"] = new() { NetLine("↓", down, downMin, hd, _c.NetDown, bytes, HourPeak("down", down), HourPeak("down.pk", downMin)) };
-            if (On("net.up")) items["net.up"] = new() { NetLine("↑", up, upMin, hu, _c.NetUp, bytes, HourPeak("up", up), HourPeak("up.pk", upMin)) };
+            var downPeak = HourPeak("down", down); var downPkPeak = HourPeak("down.pk", downMin);
+            var upPeak = HourPeak("up", up); var upPkPeak = HourPeak("up.pk", upMin);
+            // Only unusual traffic (either direction shows both lines, so they come and go together).
+            _netDown.Add(_now, down);
+            _netUp.Add(_now, up);
+            var th = _cfg.Thresholds;
+            bool unusual = _netDown.Unusual(th.NetUnusualFactor, th.NetDownFloorMbit * 1e6) ||
+                           _netUp.Unusual(th.NetUnusualFactor, th.NetUpFloorMbit * 1e6);
+            bool shown = _cfg.Fields.NetAlways | Vis("net.traffic", unusual);
+            if (shown && On("net.down")) items["net.down"] = new() { NetLine("↓", down, downMin, hd, _c.NetDown, bytes, downPeak, downPkPeak) };
+            if (shown && On("net.up")) items["net.up"] = new() { NetLine("↑", up, upMin, hu, _c.NetUp, bytes, upPeak, upPkPeak) };
 
             // Adapter names: only when more than one physical adapter has traffic.
             var active = net.Where(a => a.DownBps + a.UpBps >= AdapterTrafficBps).ToList();
-            if (On("net.adapters") && Vis("net.multi", active.Count > 1))
+            if (shown && On("net.adapters") && Vis("net.multi", active.Count > 1))
             {
                 var lines = new List<Line>();
                 foreach (var a in net.OrderByDescending(a => a.DownBps + a.UpBps))

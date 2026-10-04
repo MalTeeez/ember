@@ -34,6 +34,8 @@ public sealed class FieldSettings
     public bool NetBytes { get; set; } = false;
     /// <summary>Device batteries: always shown (false = only when below the warning value).</summary>
     public bool BatteryAlways { get; set; } = true;
+    /// <summary>Network rate lines always (off: only with unusual traffic).</summary>
+    public bool NetAlways { get; set; } = false;
 }
 
 public sealed class ThresholdSettings
@@ -65,6 +67,11 @@ public sealed class ThresholdSettings
     public Threshold DiskQueue { get; set; } = new(2, 5);
     public Threshold FreeSpacePercent { get; set; } = new(10, 5);
     public double FreeSpaceGb { get; set; } = 20;
+    // Network traffic: unusual = the last ~10 s at least this many times the ~30 min average,
+    // and at least the floor (Mbit/s).
+    public double NetUnusualFactor { get; set; } = 4;
+    public double NetDownFloorMbit { get; set; } = 20;
+    public double NetUpFloorMbit { get; set; } = 5;
     // Network quality
     public Threshold PacketLoss { get; set; } = new(5, 20);
     public Threshold GatewayLatency { get; set; } = new(20, 50);

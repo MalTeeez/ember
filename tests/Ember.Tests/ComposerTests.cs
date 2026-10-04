@@ -42,7 +42,9 @@ public class ComposerTests
     [Fact]
     public void NormalState_CpuAndNetwork()
     {
-        var lines = new StatusComposer().Compose(Snap(0, clock: 4200), Cfg());
+        var cfg = Cfg();
+        cfg.Fields.NetAlways = true;
+        var lines = new StatusComposer().Compose(Snap(0, clock: 4200), cfg);
         // cpu, spacer, net header, down, up
         Assert.Equal(5, lines.Count);
         // label, temperature slot (5..9), graph (10..19), load, clock with its unit
@@ -186,7 +188,9 @@ public class ComposerTests
         var c = new StatusComposer();
         var net = new List<AdapterRate> { new("Ethernet", 50e6, 1e6), new("Wi-Fi", 11e6, 1.1e6) };
         List<Line> lines = new();
-        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, net: net), Cfg());
+        var cfg = Cfg();
+        cfg.Fields.NetAlways = true;
+        for (int i = 0; i <= 5; i++) lines = c.Compose(Snap(i, net: net), cfg);
         Assert.Contains(lines, l => l.Text.Contains("Ethernet"));
         Assert.Contains(lines, l => l.Text.Contains("Wi-Fi"));
     }
@@ -381,6 +385,7 @@ public class ComposerTests
     public void Layout_Reorder_And_Spacers()
     {
         var cfg = Cfg();
+        cfg.Fields.NetAlways = true;
         var down = cfg.Entries.First(e => e.Id == "net.down");
         cfg.Entries.Remove(down);
         cfg.Entries.Insert(0, down);

@@ -7,8 +7,9 @@ using Ember.Core.Claude;
 namespace Ember.Sensors;
 
 /// <summary>
-/// Polls a usage endpoint (Claude, Codex, Copilot) on a timer. Any failure hides the lines of the
-/// provider; HTTP 429 doubles the interval until a request succeeds. Tokens are only read, never refreshed.
+/// Polls a usage endpoint (Claude, Codex, Copilot) on a timer. Token and auth failures hide the lines of the
+/// provider. Network errors, timeouts, 5xx and 429 keep the last data (hidden after <see cref="StaleAfter"/>)
+/// and poll less often until a request succeeds. Tokens are only read, never refreshed.
 /// </summary>
 internal abstract class UsagePoller : IDisposable
 {
@@ -115,10 +116,14 @@ internal abstract class UsagePoller : IDisposable
         _timer.Change(due, Timeout.InfiniteTimeSpan);
     }
 
+    /// <summary>Last good data older than this is hidden (requests keep failing).</summary>
+    private static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(15);
+
     public IReadOnlyList<ClaudeLine>? Lines(DateTimeOffset now)
     {
         lock (_gate)
         {
+            if (now - _tracker.DataTime > StaleAfter + _backoff.Current) return null;
             var l = _tracker.Lines(now);
             return l.Count == 0 ? null : l;
         }
@@ -134,9 +139,13 @@ internal abstract class UsagePoller : IDisposable
         {
             await PollOnceAsync().ConfigureAwait(false);
         }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            Transient("network", ex);
+        }
         catch (Exception ex)
         {
-            Fail(Source + ".poll", ex);
+            Fail("poll", ex);
         }
         finally
         {
@@ -160,21 +169,25 @@ internal abstract class UsagePoller : IDisposable
         if (resp.StatusCode == HttpStatusCode.TooManyRequests)
         {
             // Rate limited: keep the last data (reset times are absolute, so it stays correct) and wait longer.
-            _backoff.OnRateLimited();
-            Log.SourceFailed(Source + ".429");
-            Log.Write($"{Source}: 429, next poll in {_backoff.Current}");
+            Transient("HTTP 429");
+            return;
+        }
+        int code = (int)resp.StatusCode;
+        if (code >= 500 || code == 408)
+        {
+            Transient("HTTP " + code);
             return;
         }
         if (!resp.IsSuccessStatusCode)
         {
-            Fail(Source + ".http." + (int)resp.StatusCode);
+            Fail("HTTP " + code + (code is 401 or 403 ? " (token not accepted)" : ""));
             return;
         }
         string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
         var data = Parse(body, DateTimeOffset.UtcNow);
         if (data == null)
         {
-            Fail(Source + ".parse");
+            Transient("answer not understood: " + (body.Length > 200 ? body[..200] + "…" : body));
             return;
         }
         _backoff.OnSuccess();
@@ -188,11 +201,18 @@ internal abstract class UsagePoller : IDisposable
         Log.SourceOk(Source);
     }
 
-    protected void Fail(string source, Exception? ex = null)
+    /// <summary>Hides the lines and logs the reason (logged again when the reason changes).</summary>
+    protected void Fail(string reason, Exception? ex = null)
     {
         lock (_gate) _tracker.Fail();
-        Log.SourceFailed(source, ex);
-        Log.SourceFailed(Source);
+        Log.SourceFailed(Source, reason + ", lines hidden", ex);
+    }
+
+    /// <summary>A failure that may go away: keep the last data, poll less often.</summary>
+    private void Transient(string reason, Exception? ex = null)
+    {
+        _backoff.OnRateLimited();
+        Log.SourceFailed(Source, $"{reason}, keeping last data, next poll in {_backoff.Current:m\\:ss}", ex);
     }
 
     protected static async Task<string?> ReadFileAsync(string path)
@@ -219,7 +239,7 @@ internal sealed class ClaudePoller : UsagePoller
         if (token == null || token.IsExpired(DateTimeOffset.UtcNow))
         {
             // Do not refresh: Claude Code refreshes the file itself the next time it runs.
-            Fail(token == null ? "claude.credentials" : "claude.token.expired");
+            Fail(token == null ? "no token in " + _credentialsPath : "token expired (run Claude Code to refresh it)");
             return null;
         }
         var req = new HttpRequestMessage(HttpMethod.Get, UsageApi.Url);
@@ -255,7 +275,7 @@ internal sealed class CodexPoller : UsagePoller
         if (auth == null || auth.ExpiresAt is { } e && e <= DateTimeOffset.UtcNow)
         {
             // Do not refresh: the Codex CLI refreshes auth.json itself.
-            Fail(auth == null ? "codex.auth" : "codex.token.expired");
+            Fail(auth == null ? "no Codex auth.json" : "token expired (run Codex to refresh it)");
             return null;
         }
         var req = new HttpRequestMessage(HttpMethod.Get, CodexUsage.Url);
@@ -326,7 +346,7 @@ internal sealed class CopilotPoller : UsagePoller
         var token = await TokenAsync().ConfigureAwait(false);
         if (token == null)
         {
-            Fail("copilot.token");
+            Fail("no Copilot token");
             return null;
         }
         var req = new HttpRequestMessage(HttpMethod.Get, CopilotUsage.Url);

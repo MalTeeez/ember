@@ -171,6 +171,7 @@ public static class SettingsSchema
         yield return Bool(L, "Fields", "Claude projection line", s => s.Fields.ClaudeProjection, (s, v) => s.Fields.ClaudeProjection = v);
         yield return Bool(L, "Fields", "Network in bytes (not bits)", s => s.Fields.NetBytes, (s, v) => s.Fields.NetBytes = v);
         yield return Bool(L, "Fields", "Device batteries always (off: only when low)", s => s.Fields.BatteryAlways, (s, v) => s.Fields.BatteryAlways = v);
+        yield return Bool(L, "Fields", "Network rates always (off: only with unusual traffic)", s => s.Fields.NetAlways, (s, v) => s.Fields.NetAlways = v);
 
         // ── Appearance ──
         const string A = "Appearance";
@@ -274,6 +275,9 @@ public static class SettingsSchema
         foreach (var f in Pair(T, "Disk queue length", 0, 1000, s => s.Thresholds.DiskQueue)) yield return f;
         foreach (var f in Pair(T, "Free space %", 0, 100, s => s.Thresholds.FreeSpacePercent)) yield return f;
         yield return Number(T, "", "Free space warning GB", 0, 1e6, s => s.Thresholds.FreeSpaceGb, (s, v) => s.Thresholds.FreeSpaceGb = v);
+        yield return Number(T, "", "Unusual traffic: × the 30 min average", 1, 1000, s => s.Thresholds.NetUnusualFactor, (s, v) => s.Thresholds.NetUnusualFactor = v);
+        yield return Number(T, "", "Unusual traffic: at least Mbit/s down", 0, 1e6, s => s.Thresholds.NetDownFloorMbit, (s, v) => s.Thresholds.NetDownFloorMbit = v);
+        yield return Number(T, "", "Unusual traffic: at least Mbit/s up", 0, 1e6, s => s.Thresholds.NetUpFloorMbit, (s, v) => s.Thresholds.NetUpFloorMbit = v);
         foreach (var f in Pair(T, "Packet loss %", 0, 100, s => s.Thresholds.PacketLoss)) yield return f;
         foreach (var f in Pair(T, "Gateway latency ms", 0, 10000, s => s.Thresholds.GatewayLatency)) yield return f;
         foreach (var f in Pair(T, "Internet latency ms", 0, 10000, s => s.Thresholds.InternetLatency)) yield return f;

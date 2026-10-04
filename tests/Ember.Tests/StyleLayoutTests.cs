@@ -918,3 +918,41 @@ public class V10Tests
         Assert.Equal(2, k.Reserve("b", 0, t0.AddSeconds(45), hold));
     }
 }
+
+public class NetUnusualTests
+{
+    [Fact]
+    public void Baseline_FlagsBurst_ThenAdapts()
+    {
+        var b = new Ember.Core.Stats.TrafficBaseline();
+        var t = new DateTime(2026, 10, 4, 12, 0, 0);
+        // 2 Mbit/s for an hour: usual.
+        for (int i = 0; i <= 3600; i++) b.Add(t.AddSeconds(i), 2e6);
+        Assert.False(b.Unusual(4, 20e6));
+        // A 100 Mbit/s download: unusual after a few seconds.
+        t = t.AddSeconds(3600);
+        for (int i = 1; i <= 30; i++) b.Add(t.AddSeconds(i), 100e6);
+        Assert.True(b.Unusual(4, 20e6));
+        // After two hours of it, it is the new normal.
+        for (int i = 31; i <= 7200; i++) b.Add(t.AddSeconds(i), 100e6);
+        Assert.False(b.Unusual(4, 20e6));
+    }
+
+    [Fact]
+    public void QuietNet_HidesRateLines()
+    {
+        var cfg = new EmberSettings();
+        cfg.Intervals.ShowDelaySeconds = 0;
+        cfg.Intervals.HideDelaySeconds = 0;
+        var c = new StatusComposer();
+        var t0 = new DateTime(2026, 10, 4, 12, 0, 0);
+        var quiet = new List<Ember.Core.Net.AdapterRate> { new("Ethernet", 1e6, 0.2e6) };
+        var busy = new List<Ember.Core.Net.AdapterRate> { new("Ethernet", 300e6, 1e6) };
+        List<Ember.Core.Render.Line> lines = new();
+        for (int i = 0; i < 60; i++) lines = c.Compose(new Snapshot { Time = t0.AddSeconds(i), Net = quiet }, cfg);
+        Assert.DoesNotContain(lines, l => l.Text.StartsWith("\u2193"));
+        for (int i = 60; i < 80; i++) lines = c.Compose(new Snapshot { Time = t0.AddSeconds(i), Net = busy }, cfg);
+        Assert.Contains(lines, l => l.Text.StartsWith("\u2193"));
+        Assert.Contains(lines, l => l.Text.StartsWith("\u2191"));
+    }
+}

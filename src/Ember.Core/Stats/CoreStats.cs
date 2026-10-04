@@ -212,3 +212,38 @@ public sealed class SlidingPeak
 
     public void Clear() => _buckets.Clear();
 }
+
+/// <summary>
+/// "Unusual" traffic: a short average (about 10 s) against a slow baseline (about 30 min).
+/// Unusual = short average at least <c>factor</c> × baseline and at least <c>floor</c>.
+/// A long transfer becomes the new normal after some time (the baseline follows it).
+/// </summary>
+public sealed class TrafficBaseline
+{
+    public TimeSpan ShortTau { get; init; } = TimeSpan.FromSeconds(10);
+    public TimeSpan LongTau { get; init; } = TimeSpan.FromMinutes(30);
+    private DateTime _last;
+    private bool _started;
+    public double Short { get; private set; }
+    public double Baseline { get; private set; }
+
+    public void Add(DateTime now, double value)
+    {
+        if (double.IsNaN(value) || value < 0) return;
+        if (!_started)
+        {
+            _started = true;
+            _last = now;
+            Short = value;
+            Baseline = 0; // first minutes: only the floor counts
+            return;
+        }
+        double dt = Math.Clamp((now - _last).TotalSeconds, 0, 3600);
+        _last = now;
+        if (dt <= 0) return;
+        Short += (value - Short) * (1 - Math.Exp(-dt / ShortTau.TotalSeconds));
+        Baseline += (value - Baseline) * (1 - Math.Exp(-dt / LongTau.TotalSeconds));
+    }
+
+    public bool Unusual(double factor, double floor) => Short >= floor && Short >= factor * Baseline;
+}

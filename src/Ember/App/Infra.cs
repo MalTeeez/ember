@@ -34,10 +34,12 @@ internal static class Paths
     }
 }
 
-/// <summary>Debug log. Off by default; turn on in Settings. The file is cut at 1 MB.</summary>
+/// <summary>Debug log. Off by default; turn on in Settings. Each start begins a new file (the previous
+/// one is kept as ember.log.old); the file is also cut at 1 MB.</summary>
 internal static class Log
 {
     private static readonly object Gate = new();
+    private static bool _fresh;
     public static volatile bool Enabled;
     private const long MaxBytes = 1024 * 1024;
 
@@ -50,7 +52,12 @@ internal static class Log
             {
                 Directory.CreateDirectory(Paths.AppData);
                 var fi = new FileInfo(Paths.LogFile);
-                if (fi.Exists && fi.Length > MaxBytes)
+                if (!_fresh)
+                {
+                    _fresh = true;
+                    if (fi.Exists) File.Move(Paths.LogFile, Paths.LogFile + ".old", true);
+                }
+                else if (fi.Exists && fi.Length > MaxBytes)
                     File.Move(Paths.LogFile, Paths.LogFile + ".old", true);
                 File.AppendAllText(Paths.LogFile, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{Environment.CurrentManagedThreadId}] {message}{Environment.NewLine}");
             }
@@ -61,16 +68,20 @@ internal static class Log
         }
     }
 
-    /// <summary>Logs a source failure once until it works again.</summary>
-    private static readonly HashSet<string> Failed = new();
+    /// <summary>Logs a source failure once until it works again (again when the reason changes).</summary>
+    private static readonly Dictionary<string, string> Failed = new();
 
-    public static void SourceFailed(string source, Exception? ex = null)
+    public static void SourceFailed(string source, Exception? ex = null) => SourceFailed(source, (string?)null, ex);
+
+    public static void SourceFailed(string source, string? reason, Exception? ex = null)
     {
+        string text = (reason ?? "") + (ex != null ? (reason != null ? ": " : "") + ex.GetType().Name + ": " + ex.Message : "");
         lock (Failed)
         {
-            if (!Failed.Add(source)) return;
+            if (Failed.TryGetValue(source, out var old) && old == text) return;
+            Failed[source] = text;
         }
-        Write($"source failed: {source}{(ex != null ? ": " + ex.GetType().Name + ": " + ex.Message : "")}");
+        Write($"source failed: {source}{(text.Length > 0 ? " (" + text + ")" : "")}");
     }
 
     public static void SourceOk(string source)
