@@ -48,7 +48,7 @@ internal sealed partial class AppHost
 
         _ping = new PingMonitor();
         _ping.Configure(PingOn(_settings), _settings.Network.InternetHost, _settings.Network.ShowTraceroute);
-        _claude = new ClaudePoller(Paths.ClaudeCredentials);
+        _claude = new ClaudePoller(Paths.ClaudeCredentialCandidates());
         _codex = new CodexPoller();
         _copilot = new CopilotPoller();
         _battery = new BatteryMonitor();
@@ -196,9 +196,11 @@ internal sealed partial class AppHost
     {
         var cfg = _settings;
         var now = DateTimeOffset.UtcNow;
-        if (ClaudeOn(cfg)) s.Claude = _claude?.Lines(now);
-        if (CodexOn(cfg)) s.Codex = _codex?.Lines(now);
-        if (CopilotOn(cfg)) s.Copilot = _copilot?.Lines(now);
+        var plans = new Dictionary<string, string>();
+        if (ClaudeOn(cfg)) { s.Claude = _claude?.Lines(now); if (_claude?.Plan is { } p) plans["claude"] = p; }
+        if (CodexOn(cfg)) { s.Codex = _codex?.Lines(now); if (_codex?.Plan is { } p) plans["codex"] = p; }
+        if (CopilotOn(cfg)) { s.Copilot = _copilot?.Lines(now); if (_copilot?.Plan is { } p) plans["copilot"] = p; }
+        if (plans.Count > 0) s.Plans = plans;
         if (BatteryOn(cfg)) s.Batteries = _battery?.Batteries;
         if (PingOn(cfg)) s.Quality = _ping?.Quality();
         return s;

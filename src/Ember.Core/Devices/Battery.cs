@@ -140,6 +140,8 @@ public static class DeviceNames
         {
             if (d.Name.Length <= width) return d.Name;
             string kind = Kind(d.Name);
+            // Unknown kind: keep the real name (the caller shortens it with dots) instead of a bare "device".
+            if (kind == "device") return d.Name;
             kind = char.ToUpperInvariant(kind[0]) + kind[1..]; // "Razer Mouse"
             string brand = d.Brand.Length > 0 ? d.Brand : Brand(d.Name, d.Source);
             return brand.Length > 0 ? brand + " " + kind : kind;

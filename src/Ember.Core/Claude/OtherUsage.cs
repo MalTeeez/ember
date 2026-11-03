@@ -81,6 +81,7 @@ public static class CodexUsage
             {
                 ShortLabel = Label(primary?.Length, "5h"),
                 LongLabel = Label(secondary?.Length, "week"),
+                Plan = Str(doc.RootElement, "plan_type"),
             };
         }
         catch (JsonException) { return null; }
@@ -167,7 +168,10 @@ public static class CopilotUsage
             if (Quota(snaps, "chat", reset, length) is { } chat) extra.Add(("chat", chat));
             if (Quota(snaps, "completions", reset, length) is { } code) extra.Add(("code", code));
             if (premium == null && extra.Count == 0) return null;
-            return new UsageData(null, premium, extra) { LongLabel = "premium", ModelsAlways = true };
+            string? plan = null;
+            foreach (var key in new[] { "copilot_plan", "access_type_sku" })
+                if (root.TryGetProperty(key, out var pv) && pv.ValueKind == JsonValueKind.String && pv.GetString() is { Length: > 0 } ps) { plan = ps; break; }
+            return new UsageData(null, premium, extra) { LongLabel = "premium", ModelsAlways = true, Plan = plan };
         }
         catch (JsonException) { return null; }
     }

@@ -161,6 +161,14 @@ public class UsageParsingTests
     }
 
     [Fact]
+    public void Credentials_SubscriptionType()
+    {
+        Assert.Equal("max", OAuthToken.Parse("""{"claudeAiOauth":{"accessToken":"a","subscriptionType":"max"}}""")!.SubscriptionType);
+        Assert.Equal("pro", OAuthToken.Parse("""{"claudeAiOauth":{"accessToken":"a","subscription_type":"pro"}}""")!.SubscriptionType);
+        Assert.Null(OAuthToken.Parse("""{"claudeAiOauth":{"accessToken":"a"}}""")!.SubscriptionType);
+    }
+
+    [Fact]
     public void Backoff_Plus30sOn429_UpTo5Min_ResetsOnSuccess()
     {
         var b = new PollBackoff(TimeSpan.FromSeconds(15)); // below the minimum: 1 min

@@ -18,11 +18,11 @@ public static class UsageApi
 }
 
 /// <summary>Token from %USERPROFILE%\.claude\.credentials.json. The token is never refreshed.</summary>
-public sealed record OAuthToken(string AccessToken, DateTimeOffset? ExpiresAt)
+public sealed record OAuthToken(string AccessToken, DateTimeOffset? ExpiresAt, string? SubscriptionType = null)
 {
     public bool IsExpired(DateTimeOffset now) => ExpiresAt is { } e && e <= now;
 
-    /// <summary>Parses { "claudeAiOauth": { "accessToken": "...", "expiresAt": 1730000000000 } }. Null if not valid.</summary>
+    /// <summary>Parses { "claudeAiOauth": { "accessToken": "...", "expiresAt": 1730000000000, "subscriptionType": "max" } }. Null if not valid.</summary>
     public static OAuthToken? Parse(string json)
     {
         try
@@ -35,7 +35,10 @@ public sealed record OAuthToken(string AccessToken, DateTimeOffset? ExpiresAt)
             DateTimeOffset? exp = null;
             if (o.TryGetProperty("expiresAt", out var e) && e.ValueKind == JsonValueKind.Number && e.TryGetInt64(out long ms))
                 exp = DateTimeOffset.FromUnixTimeMilliseconds(ms);
-            return new OAuthToken(token, exp);
+            string? sub = null;
+            foreach (var key in new[] { "subscriptionType", "subscription_type" })
+                if (o.TryGetProperty(key, out var s) && s.ValueKind == JsonValueKind.String && s.GetString() is { Length: > 0 } sv) { sub = sv; break; }
+            return new OAuthToken(token, exp, sub);
         }
         catch (JsonException) { return null; }
     }
@@ -54,6 +57,8 @@ public sealed record UsageData(UsageWindow? FiveHour, UsageWindow? SevenDay, IRe
     public string LongLabel { get; init; } = "week";
     /// <summary>Show extra windows always (Copilot), not only when higher than the long window (Claude models).</summary>
     public bool ModelsAlways { get; init; }
+    /// <summary>Subscription/plan name for the section header ("max", "pro", "plus", "business"). Null = unknown.</summary>
+    public string? Plan { get; init; }
 
     /// <summary>Null if the JSON is not valid or has neither window.</summary>
     public static UsageData? Parse(string json)

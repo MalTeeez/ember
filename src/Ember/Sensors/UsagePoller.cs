@@ -119,6 +119,12 @@ internal abstract class UsagePoller : IDisposable
     /// <summary>Last good data older than this is hidden (requests keep failing).</summary>
     private static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(15);
 
+    /// <summary>The subscription/plan shown next to the provider name, or null when unknown or stale.</summary>
+    public string? Plan
+    {
+        get { lock (_gate) return _tracker.DataTime != default && DateTime.UtcNow - _tracker.DataTime.UtcDateTime <= (StaleAfter + _backoff.Current) ? _tracker.Data?.Plan : null; }
+    }
+
     public IReadOnlyList<ClaudeLine>? Lines(DateTimeOffset now)
     {
         lock (_gate)
@@ -227,28 +233,37 @@ internal abstract class UsagePoller : IDisposable
 /// <summary>Claude Code: %USERPROFILE%\.claude\.credentials.json, /api/oauth/usage.</summary>
 internal sealed class ClaudePoller : UsagePoller
 {
-    private readonly string _credentialsPath;
+    private readonly IReadOnlyList<string> _candidates;
+    private string? _subscription;
     // At least 2 min: the endpoint answers 429 to every second request at 1 min.
-    public ClaudePoller(string credentialsPath) : base(TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2)) => _credentialsPath = credentialsPath;
+    public ClaudePoller(IReadOnlyList<string> credentialCandidates) : base(TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2)) => _candidates = credentialCandidates;
     protected override string Source => "claude";
 
     protected override async Task<HttpRequestMessage?> CreateRequestAsync()
     {
-        var json = await ReadFileAsync(_credentialsPath).ConfigureAwait(false);
-        var token = json == null ? null : OAuthToken.Parse(json);
+        // The CLI and the desktop app can keep .credentials.json in different folders: try each.
+        OAuthToken? token = null;
+        string tried = "";
+        foreach (var path in _candidates)
+        {
+            tried += (tried.Length > 0 ? ", " : "") + path;
+            if (await ReadFileAsync(path).ConfigureAwait(false) is { } json && OAuthToken.Parse(json) is { } t) { token = t; break; }
+        }
         if (token == null || token.IsExpired(DateTimeOffset.UtcNow))
         {
             // Do not refresh: Claude Code refreshes the file itself the next time it runs.
-            Fail(token == null ? "no token in " + _credentialsPath : "token expired (run Claude Code to refresh it)");
+            Fail(token == null ? "no token in " + tried : "token expired (run Claude Code to refresh it)");
             return null;
         }
+        _subscription = token.SubscriptionType;
         var req = new HttpRequestMessage(HttpMethod.Get, UsageApi.Url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
         req.Headers.TryAddWithoutValidation(UsageApi.BetaHeader, UsageApi.BetaValue);
         return req;
     }
 
-    protected override UsageData? Parse(string body, DateTimeOffset now) => UsageData.Parse(body);
+    protected override UsageData? Parse(string body, DateTimeOffset now)
+        => UsageData.Parse(body) is { } d ? d with { Plan = _subscription } : null;
 }
 
 /// <summary>OpenAI Codex: %CODEX_HOME%\auth.json (default %USERPROFILE%\.codex\auth.json), chatgpt.com/backend-api/wham/usage.</summary>

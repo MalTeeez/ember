@@ -343,6 +343,15 @@ public class ComposerTests
     }
 
     [Fact]
+    public void Claude_Header_ShowsSubscription()
+    {
+        var s = Snap(0, claude: Claude());
+        s.Plans = new Dictionary<string, string> { ["claude"] = "max" };
+        var lines = new StatusComposer().Compose(s, Cfg());
+        Assert.Contains(lines, l => l.Text.Contains("claude max"));
+    }
+
+    [Fact]
     public void Claude_HiddenWhenNull()
         => Assert.DoesNotContain(new StatusComposer().Compose(Snap(0, claude: null), Cfg()), l => l.Text.Contains("claude"));
 

@@ -96,6 +96,22 @@ public static class Glyphs
             // Empty cells show a dim dot so the bar length is visible.
             return (string.Concat(bar.Select(ch => ch == ' ' ? '\u00B7' : ch)), filled);
         }
+        if (style == "fine")
+        {
+            // Braille has two dot columns per character: a bar in half-cell (2\u00D7) steps. A filled column
+            // is all four dots; every column keeps its bottom dot as a track, so the length stays visible.
+            const int leftFull = 0x47, leftTrack = 0x40, rightFull = 0xB8, rightTrack = 0x80;
+            int cols = width * 2;
+            int onCols = (int)Math.Round(fraction * cols, MidpointRounding.AwayFromZero);
+            if (fraction > 0 && onCols == 0) onCols = 1;
+            var chars = new char[width];
+            for (int i = 0; i < width; i++)
+            {
+                int bits = ((i * 2 < onCols) ? leftFull : leftTrack) | ((i * 2 + 1 < onCols) ? rightFull : rightTrack);
+                chars[i] = (char)(0x2800 + bits);
+            }
+            return (new string(chars), (onCols + 1) / 2); // cells with any filled column get the accent colour
+        }
         var (on, off) = BarGlyphs(style);
         int n = (int)Math.Round(fraction * width, MidpointRounding.AwayFromZero);
         if (fraction > 0 && n == 0) n = 1; // any use shows at least one cell

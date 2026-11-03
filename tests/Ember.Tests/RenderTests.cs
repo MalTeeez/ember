@@ -26,6 +26,23 @@ public class GlyphTests
         => Assert.Equal(expected, Glyphs.Level(v, scale));
 
     [Fact]
+    public void StyledBar_Fine_UsesBrailleHalfCells()
+    {
+        // 4 cells = 8 half-cell columns. Every cell keeps its bottom track dots (0x28C0 when empty).
+        var (empty, ef) = Glyphs.StyledBar(0, 4, "fine");
+        Assert.Equal("⣀⣀⣀⣀", empty);
+        Assert.All(empty, ch => Assert.Equal(0x28C0, ch));
+        Assert.Equal(0, ef);
+        var (full, ff) = Glyphs.StyledBar(1, 4, "fine");
+        Assert.All(full, ch => Assert.Equal(0x28FF, ch));
+        Assert.Equal(4, ff);
+        // 5/8 → 5 columns on: cells 0,1 full (both columns), cell 2 left column only, cell 3 track only.
+        var (five, f5) = Glyphs.StyledBar(5.0 / 8, 4, "fine");
+        Assert.Equal(new[] { 0x28FF, 0x28FF, 0x28C7, 0x28C0 }, five.Select(c => (int)c));
+        Assert.Equal(3, f5);
+    }
+
+    [Fact]
     public void Graph_HasFixedWidth_NewestRight_BlankForMissing()
     {
         var (text, max) = Glyphs.Graph(new double[] { 100, 100 }, 12, 100);

@@ -45,6 +45,24 @@ public sealed class StatusComposer
     private ThemeColors _c = ThemeColors.From(new Theme());
     private Theme? _themeRef;
     private EmberSettings _cfg = new();
+    private IReadOnlyDictionary<string, string>? _plans;
+    private static readonly IReadOnlyDictionary<string, string> DemoPlans =
+        new Dictionary<string, string> { ["claude"] = "max", ["codex"] = "pro", ["copilot"] = "business" };
+
+    /// <summary>Header text with the subscription appended for a provider section ("claude" → "claude max").</summary>
+    private string HeaderText(string text)
+    {
+        if (_plans != null && _plans.TryGetValue(text.Trim().ToLowerInvariant(), out var plan) && PlanLabel(plan) is { Length: > 0 } p)
+            return text + " " + p;
+        return text;
+    }
+
+    /// <summary>Plan name for display: lower case, underscores to spaces, at most 12 characters.</summary>
+    private static string PlanLabel(string plan)
+    {
+        string p = plan.Trim().ToLowerInvariant().Replace('_', ' ');
+        return p.Length <= 12 ? p : p[..12];
+    }
     private bool _preview;
     private DateTime _now;
     private TimeSpan _stick;
@@ -143,6 +161,7 @@ public sealed class StatusComposer
             _c = ThemeColors.From(cfg.Theme);
         }
         if (_preview) s = DemoData.Fill(s);
+        _plans = s.Plans ?? (_preview ? DemoPlans : null);
 
         _vis.ShowDelay = TimeSpan.FromSeconds(cfg.Intervals.ShowDelaySeconds);
         _vis.HideDelay = TimeSpan.FromSeconds(cfg.Intervals.HideDelaySeconds);
@@ -254,7 +273,7 @@ public sealed class StatusComposer
             if (e.Collapse && GroupHeight(entries, height, i) == 0) continue;
             // A section that only keeps space: its header/spacer line is kept space too (at the bottom).
             if (bottom && e.Collapse && GroupHeight(entries, real, i) == 0) { pad++; continue; }
-            var deco = e.Kind == "header" ? Layout.Header(e.Text ?? "", _c) : Layout.Spacer(e.Preset, e.Text, _c);
+            var deco = e.Kind == "header" ? Layout.Header(HeaderText(e.Text ?? ""), _c) : Layout.Spacer(e.Preset, e.Text, _c);
             if (e.Kind == "header" && _c.Theme.HeaderBand) deco.Back = _c.Band(_c.Header, 30);
             if (e.Kind == "header" && !_c.Theme.HeaderTextShadow) deco.NoShadow = true;
             result.Add(deco);

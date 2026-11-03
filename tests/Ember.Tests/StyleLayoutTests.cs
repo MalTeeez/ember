@@ -797,6 +797,17 @@ public class V6Tests
         var n = Ember.Core.Devices.DeviceNames.Display(list, 16);
         Assert.Equal(new[] { "Razer Mouse", "Sony Headset", "Logitech Mouse 1", "Logitech Mouse 2" }, n);
     }
+
+    [Fact]
+    public void DeviceNames_UnknownKind_KeepsRealName()
+    {
+        var list = new List<Ember.Core.Devices.DeviceBattery>
+        {
+            new("Generic BLE Peripheral Thing", 40, null, "bluetooth"), // long, no known kind
+        };
+        // Not shortened to a bare "device": the real name stays (the caller trims it with dots).
+        Assert.Equal(new[] { "Generic BLE Peripheral Thing" }, Ember.Core.Devices.DeviceNames.Display(list, 16));
+    }
 }
 
 public class V8Tests

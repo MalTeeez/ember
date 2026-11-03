@@ -85,6 +85,8 @@ public sealed class Snapshot
     public IReadOnlyList<ClaudeLine>? Claude { get; set; }
     public IReadOnlyList<ClaudeLine>? Codex { get; set; }
     public IReadOnlyList<ClaudeLine>? Copilot { get; set; }
+    /// <summary>Subscription/plan name per provider section ("claude"/"codex"/"copilot" → "max"/"pro"/…).</summary>
+    public IReadOnlyDictionary<string, string>? Plans { get; set; }
     /// <summary>Batteries of Bluetooth devices and Razer wireless receivers.</summary>
     public IReadOnlyList<Ember.Core.Devices.DeviceBattery>? Batteries { get; set; }
 }

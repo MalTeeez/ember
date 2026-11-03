@@ -13,6 +13,28 @@ internal static class Paths
     public static string LogFile => Path.Combine(AppData, "ember.log");
     public static string ClaudeCredentials => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", ".credentials.json");
 
+    /// <summary>
+    /// Places the token file (.credentials.json) can be, in order: CLAUDE_CONFIG_DIR, the CLI default
+    /// (~/.claude), and the desktop app's folders (%APPDATA%\Claude, %LOCALAPPDATA%\Claude).
+    /// </summary>
+    public static IReadOnlyList<string> ClaudeCredentialCandidates()
+    {
+        const string file = ".credentials.json";
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var list = new List<string>();
+        void Add(string p) { if (p.Length > 0 && !list.Contains(p, StringComparer.OrdinalIgnoreCase)) list.Add(p); }
+        var cfg = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
+        if (!string.IsNullOrWhiteSpace(cfg))
+            foreach (var dir in cfg.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                Add(Path.Combine(dir, file));
+        Add(Path.Combine(home, ".claude", file));
+        Add(Path.Combine(appData, "Claude", file));
+        Add(Path.Combine(local, "Claude", file));
+        return list;
+    }
+
     /// <summary>Opens the log in the default editor. Makes an empty log first if there is none.</summary>
     public static void OpenLog()
     {

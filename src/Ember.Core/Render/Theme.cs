@@ -40,7 +40,7 @@ public sealed class Theme
     /// <summary>Low → high colours for "intensity" graphs and bars.</summary>
     public List<string> GraphStops { get; set; } = new() { "#6B8F71", "#E0B050", "#FF5A3C" };
 
-    /// <summary>Usage bar style: blocks, colons, squares, pips, braille, line, shade.</summary>
+    /// <summary>Usage bar style: blocks, colons, squares, pips, braille, fine (braille half-cells), line, shade.</summary>
     public string BarStyle { get; set; } = "colons";
     /// <summary>Filled bar cells coloured along the graph stops (by position) instead of the category accent.</summary>
     public bool BarGradient { get; set; } = false;
@@ -202,7 +202,7 @@ public static class ThemeStore
     public static readonly string[] BackgroundKinds = { "none", "solid", "gradient", "acrylic", "blur", "panel", "glass" };
     public static readonly string[] HeaderStyles = { "rule", "spaced", "plain", "bracket", "dots", "fade", "double", "heavy", "box", "angle", "wave", "diamond", "arrow", "chevron", "blocks" };
     public static readonly string[] HeaderAligns = { "left", "center", "right" };
-    public static readonly string[] BarStyles = { "colons", "squares", "pips", "braille", "line", "shade", "blocks" };
+    public static readonly string[] BarStyles = { "colons", "squares", "pips", "braille", "fine", "line", "shade", "blocks" };
     public static readonly string[] GraphColorings = { "intensity", "category", "mono" };
 
     public static IReadOnlyList<Theme> BuiltIn { get; } = new[]

@@ -48,6 +48,7 @@ public class CodexTests
         Assert.Equal(12, d.SevenDay!.Utilization);
         Assert.Equal("5h", d.ShortLabel);
         Assert.Equal("week", d.LongLabel);
+        Assert.Equal("plus", d.Plan);
     }
 
     [Fact]
@@ -88,6 +89,7 @@ public class CopilotTests
         Assert.Equal(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), d.SevenDay.ResetsAt);
         Assert.Equal(TimeSpan.FromDays(31), d.SevenDay.Length);
         Assert.Equal("premium", d.LongLabel);
+        Assert.Equal("individual", d.Plan);
         Assert.Empty(d.Models);
     }
 
