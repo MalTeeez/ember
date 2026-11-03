@@ -50,6 +50,7 @@ internal sealed partial class AppHost : Win32Window, IDisposable
         W.ChangeWindowMessageFilterEx(Handle, TaskbarCreated, W.MSGFLT_ALLOW, IntPtr.Zero);
         W.ChangeWindowMessageFilterEx(Handle, ActivateMessage, W.MSGFLT_ALLOW, IntPtr.Zero);
 
+        WidgetWindow.AttachToDesktop = _settings.Layout.OnDesktop;
         _widget.Settings = _settings;
         _widget.Create();
         _widget.Moved += () =>
@@ -110,6 +111,12 @@ internal sealed partial class AppHost : Win32Window, IDisposable
             catch (Exception ex) { Log.Write("save settings failed: " + ex.Message); }
         }
         _widget.Settings = SettingsStore.Clone(copy);
+        if (WidgetWindow.AttachToDesktop != copy.Layout.OnDesktop)
+        {
+            WidgetWindow.AttachToDesktop = copy.Layout.OnDesktop;
+            _widget.Reattach();
+            ReattachFeatures(); // notes follow the same choice
+        }
         OnSettingsChanged(copy);
         if (!fromWidget) _widget.Invalidate();
         // The next sample (now) composes with the new settings. Composing the last snapshot

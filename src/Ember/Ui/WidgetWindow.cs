@@ -61,24 +61,31 @@ internal sealed class WidgetWindow : Win32Window
     /// <summary>The window was moved in edit mode; settings changed.</summary>
     public event Action? Moved;
 
+    /// <summary>
+    /// When set, the widget and notes are owned by the desktop (Progman) so "Show desktop" keeps them.
+    /// Off breaks nothing on the desktop shell (QuickLook and the like). Set before Create.
+    /// </summary>
+    public static bool AttachToDesktop;
+
     public void Create()
     {
         RegisterClass(ClassName, IntPtr.Zero, IntPtr.Zero);
         uint ex = W.WS_EX_LAYERED | W.WS_EX_TOOLWINDOW | W.WS_EX_NOACTIVATE | W.WS_EX_TRANSPARENT;
-        CreateHandle(ClassName, "Ember", ex, W.WS_POPUP, 0, 0, 1, 1, DesktopOwner());
+        CreateHandle(ClassName, "Ember", ex, W.WS_POPUP, 0, 0, 1, 1, Owner());
         _transparent = true;
         W.ShowWindow(Handle, W.SW_SHOWNOACTIVATE);
         W.SetWindowPos(Handle, W.HWND_BOTTOM, 0, 0, 0, 0, W.SWP_NOMOVE | W.SWP_NOSIZE | W.SWP_NOACTIVATE);
     }
 
-    /// <summary>The desktop window (Progman). Zero if Explorer is not running.</summary>
-    public static IntPtr DesktopOwner() => W.FindWindow("Progman", null);
+    /// <summary>The desktop window (Progman), or Zero when not attaching to the desktop.</summary>
+    public static IntPtr DesktopOwner() => AttachToDesktop ? W.FindWindow("Progman", null) : IntPtr.Zero;
+    private static IntPtr Owner() => DesktopOwner();
 
-    /// <summary>Attach to the desktop again (after an Explorer restart).</summary>
+    /// <summary>Apply the current desktop-attach choice (and reattach after an Explorer restart).</summary>
     public void Reattach()
     {
         if (!IsAlive) return;
-        W.SetWindowLongPtr(Handle, W.GWLP_HWNDPARENT, DesktopOwner());
+        W.SetWindowLongPtr(Handle, W.GWLP_HWNDPARENT, Owner());
         if (!Hidden) W.ShowWindow(Handle, W.SW_SHOWNOACTIVATE);
         W.SetWindowPos(Handle, W.HWND_BOTTOM, 0, 0, 0, 0, W.SWP_NOMOVE | W.SWP_NOSIZE | W.SWP_NOACTIVATE);
         _accentKey = "";

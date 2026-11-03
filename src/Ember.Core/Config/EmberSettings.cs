@@ -122,6 +122,11 @@ public sealed class LayoutSettings
     /// <summary>Distance from the corner of the work area, in DIP (1/96 inch).</summary>
     public int OffsetX { get; set; } = 24;
     public int OffsetY { get; set; } = 24;
+    /// <summary>
+    /// Pin the widget (and notes) to the desktop as windows owned by Progman, so "Show desktop" does not
+    /// hide them. Off by default: owning windows to the desktop breaks some desktop tools (QuickLook).
+    /// </summary>
+    public bool OnDesktop { get; set; } = false;
     public double FontSize { get; set; } = 10;
     /// <summary>0..100: opacity of the text and graphs (the background has its own opacity in the theme).</summary>
     public int Opacity { get; set; } = 100;

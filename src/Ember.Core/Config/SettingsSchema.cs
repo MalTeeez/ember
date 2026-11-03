@@ -145,6 +145,8 @@ public static class SettingsSchema
             (s, t) => s.Layout.Corner = Enum.Parse<Corner>(t));
         yield return Number(G, "Position", "Offset X (px at 100%)", -10000, 10000, s => s.Layout.OffsetX, (s, v) => s.Layout.OffsetX = (int)v);
         yield return Number(G, "Position", "Offset Y (px at 100%)", -10000, 10000, s => s.Layout.OffsetY, (s, v) => s.Layout.OffsetY = (int)v);
+        yield return Bool(G, "Position", "Keep on the desktop (survives Show desktop)", s => s.Layout.OnDesktop, (s, v) => s.Layout.OnDesktop = v,
+            "Owns the widget to the desktop so Win+D keeps it. Off (default) avoids breaking desktop tools such as QuickLook.");
         yield return Bool(G, "Motion", "Animate size changes", s => s.Layout.Animate, (s, v) => s.Layout.Animate = v);
         yield return Slider(G, "Motion", "Animation length (ms)", 0, 600, s => s.Layout.AnimationMs, (s, v) => s.Layout.AnimationMs = (int)v);
         yield return Choice(G, "Motion", "Kept space goes to", new[] { "section", "bottom", "inline" }, s => s.Layout.KeptSpace, (s, t) => s.Layout.KeptSpace = t);
